@@ -1,0 +1,103 @@
+# Build outputs
+/build/
+/x64
+/LivingCity/obj
+/LivingCity/GeneratedFiles
+/LivingCity/screenshots
+/LivingCity/noAvail*
+/LivingCity/*.dll
+*.pdb
+*.sdf
+*.opensdf
+*.exe
+*.ilk
+
+# Compiled simulator binary and debug artifacts
+/LivingCity/LivingCity
+/LivingCity/core
+core
+core.*
+*.o
+*.a
+*.so
+
+# qmake / Make
+Makefile
+.qmake.stash
+
+# Editor / OS junk
+*.swp
+*.swo
+*~
+.DS_Store
+.idea/
+.vscode/
+
+# Python
+__pycache__/
+*.pyc
+/cache/
+
+# Demand data (large, contact authors per README)
+/LivingCity/berkeley_2018
+
+# Benchmarking outputs (regenerated per run)
+LivingCity/benchmarking/*.csv
+LivingCity/benchmarking/*.png
+LivingCity/benchmarking/*.txt
+LivingCity/benchmarking/*.xls
+LivingCity/benchmarking/*.json
+Makefile
+.qmake.stash
+LivingCity/obj/
+LivingCity/
+build/
+
+# Local environments, package installs, and tooling caches
+.venv/
+venv/
+env/
+.conda/
+node_modules/
+*.egg-info/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.env
+.env.*
+!.env.example
+.codex/
+.agents/
+
+# Reproducible run outputs and report packages (keep source generators)
+/artifacts/
+/reports/
+/capture/
+/captures/
+/trajectories*.csv
+/*_allPathsInEdgesCUDAFormat*.csv
+/*_indexPathInit*.csv
+/*_people*.csv
+/*_route*.csv
+/all_edges_vel_*.txt
+/edges_u.txt
+/edges_v.txt
+/memory-consumption.csv
+/timestamps.info
+/gpu_rl_training_results.json
+/viz/playback/
+/viz/network.json
+/viz/trips*.json
+/viz/animated_sim/network.json
+/viz/animated_sim/trips*.json
+/docs/network.json
+/docs/trips.json
+/docs/training_results.json
+/docs/demo_output.txt
+*.ncu-rep
+*.nsys-rep
+*.qdrep
+*.log

@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>LPSim: Large-Scale Network Simulation</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://unpkg.com/deck.gl@latest/dist.min.js"></script>
+    <script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
+    <link href="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css" rel="stylesheet" />
+    <style>
+        body { margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; overflow: hidden; background: #0a0a1e; }
+        #container { width: 100vw; height: 100vh; }
+        #panel {
+            position: absolute; top: 16px; left: 16px; z-index: 10;
+            background: rgba(10, 10, 30, 0.92); color: #e0e0e0; padding: 20px;
+            border-radius: 12px; max-width: 300px; backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.08);
+        }
+        #panel h1 { margin: 0 0 4px 0; font-size: 20px; color: #fff; }
+        #panel .sub { color: #78909c; font-size: 11px; margin-bottom: 12px; }
+        .row { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid rgba(255,255,255,0.05); font-size: 12px; }
+        .row .v { color: #4fc3f7; font-weight: 500; }
+        #time-display { margin-top: 12px; text-align: center; }
+        #time-display .clock { font-size: 28px; color: #fff; font-weight: 300; font-variant-numeric: tabular-nums; }
+        #time-display .label { font-size: 10px; color: #607d8b; margin-top: 2px; }
+        #controls { margin-top: 10px; display: flex; gap: 8px; }
+        #controls button { background: rgba(79,195,247,0.15); border: 1px solid rgba(79,195,247,0.3); color: #4fc3f7; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 11px; }
+        #controls button:hover { background: rgba(79,195,247,0.3); }
+        #controls button.active { background: rgba(79,195,247,0.4); }
+        .legend { margin-top: 10px; font-size: 10px; color: #607d8b; }
+        .leg-item { display: flex; align-items: center; margin: 3px 0; }
+        .leg-dot { width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+        #loading { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); color: #fff; font-size: 16px; z-index: 100; }
+        .link { position: absolute; bottom: 16px; right: 16px; z-index: 10; background: rgba(10,10,30,0.9); color: #4fc3f7; padding: 8px 14px; border-radius: 8px; text-decoration: none; font-size: 12px; border: 1px solid rgba(79,195,247,0.3); }
+    </style>
+</head>
+<body>
+    <div id="container"></div>
+    <div id="loading">Loading simulation data...</div>
+    <div id="panel" style="display:none">
+        <h1>LPSim</h1>
+        <div class="sub">GPU-Accelerated Multi-GPU Network Simulator</div>
+        <div class="row"><span>Network</span><span class="v">SF Bay Area</span></div>
+        <div class="row"><span>Edges</span><span class="v">540,827</span></div>
+        <div class="row"><span>Nodes</span><span class="v">223,328</span></div>
+        <div class="row"><span>Vehicles</span><span class="v" id="n-vehicles">2,000</span></div>
+        <div id="time-display">
+            <div class="clock" id="clock">05:00</div>
+            <div class="label">Simulated Time</div>
+        </div>
+        <div id="controls">
+            <button id="btn-1x" class="active">1x</button>
+            <button id="btn-5x">5x</button>
+            <button id="btn-20x">20x</button>
+            <button id="btn-60x">60x</button>
+        </div>
+        <div class="legend">
+            <div class="leg-item"><div class="leg-dot" style="background:#4fc3f7"></div>Active vehicles (animated)</div>
+            <div class="leg-item"><div class="leg-dot" style="background:rgba(66,165,245,0.3)"></div>Road network</div>
+        </div>
+    </div>
+    <a class="link" href="https://github.com/Xuan-1998/LPSim" style="bottom:16px">GitHub</a>
+    <a class="link" href="llm-demo.html" style="bottom:46px;background:rgba(88,166,255,0.15)">🤖 LLM Demo</a>
+    <a class="link" href="rl-demo.html" style="bottom:76px;background:rgba(63,185,80,0.15);border-color:rgba(63,185,80,0.3);color:#3fb950">🎮 RL Demo</a>
+
+    <script>
+    const {DeckGL, GeoJsonLayer, TripsLayer} = deck;
+
+    let animationSpeed = 1;
+    let currentTime = 18000; // 5:00 AM in seconds
+    const endTime = 43200; // 12:00 PM
+    let deckgl;
+    let networkData, tripsData;
+    let animationId;
+
+    function formatTime(seconds) {
+        const h = Math.floor(seconds / 3600);
+        const m = Math.floor((seconds % 3600) / 60);
+        return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
+    }
+
+    function setSpeed(speed) {
+        animationSpeed = speed;
+        document.querySelectorAll('#controls button').forEach(b => b.classList.remove('active'));
+        document.getElementById(`btn-${speed}x`).classList.add('active');
+    }
+
+    function animate() {
+        currentTime += 10 * animationSpeed; // advance 10 seconds per frame
+        if (currentTime > endTime) currentTime = 18000; // loop
+
+        document.getElementById('clock').textContent = formatTime(currentTime);
+
+        deckgl.setProps({
+            layers: [
+                new GeoJsonLayer({
+                    id: 'roads',
+                    data: networkData,
+                    lineWidthScale: 1.5,
+                    lineWidthMinPixels: 0.5,
+                    getLineColor: [66, 165, 245, 40],
+                    getLineWidth: 1,
+                }),
+                new TripsLayer({
+                    id: 'trips',
+                    data: tripsData,
+                    getPath: d => d.path.map(p => [p[0], p[1]]),
+                    getTimestamps: d => d.path.map(p => p[2]),
+                    getColor: [79, 195, 247],
+                    opacity: 0.8,
+                    widthMinPixels: 3,
+                    trailLength: 300,
+                    currentTime: currentTime,
+                    shadowEnabled: false,
+                })
+            ]
+        });
+
+        animationId = requestAnimationFrame(animate);
+    }
+
+    async function init() {
+        const [netResp, tripsResp] = await Promise.all([
+            fetch('network.json'),
+            fetch('trips.json')
+        ]);
+        networkData = await netResp.json();
+        tripsData = await tripsResp.json();
+
+        document.getElementById('loading').style.display = 'none';
+        document.getElementById('panel').style.display = 'block';
+        document.getElementById('n-vehicles').textContent = tripsData.length.toLocaleString();
+
+        // Center on data
+        let cx = 0, cy = 0, n = 0;
+        for (const f of networkData.features.slice(0, 500)) {
+            cx += f.geometry.coordinates[0][0];
+            cy += f.geometry.coordinates[0][1];
+            n++;
+        }
+
+        deckgl = new DeckGL({
+            container: 'container',
+            mapStyle: 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json',
+            initialViewState: {
+                longitude: cx/n, latitude: cy/n,
+                zoom: 10, pitch: 50, bearing: -20
+            },
+            controller: true,
+            layers: []
+        });
+
+        // Speed controls
+        document.getElementById('btn-1x').onclick = () => setSpeed(1);
+        document.getElementById('btn-5x').onclick = () => setSpeed(5);
+        document.getElementById('btn-20x').onclick = () => setSpeed(20);
+        document.getElementById('btn-60x').onclick = () => setSpeed(60);
+
+        animate();
+    }
+
+    init();
+    </script>
+</body>
+</html>

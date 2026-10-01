@@ -1,0 +1,48 @@
+name: Build
+
+on:
+  push:
+    branches: [multi-gpu-multimode]
+  pull_request:
+    branches: [multi-gpu-multimode]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: yibo123/lpsim:cuda12.4
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install CMake
+        run: apt-get update -qq && apt-get install -y -qq cmake
+
+      - name: Configure (CMake)
+        run: |
+          mkdir -p build && cd build
+          cmake .. -DCMAKE_CUDA_ARCHITECTURES=80 -DCMAKE_CXX_FLAGS="-w"
+
+      - name: Build
+        run: |
+          cd build
+          make -j$(nproc) 2>&1 | tee build.log
+          if [ -f lpsim ]; then
+            echo "Full build successful"
+            python3 ../tools/check_cuda_artifacts.py lpsim \
+              --require-real 80 --require-virtual 80
+          elif grep -q "Linking CXX" build.log; then
+            echo "Compilation passed (link may fail without GPU driver stub)"
+          else
+            echo "Build FAILED"
+            tail -20 build.log
+            exit 1
+          fi
+
+      - name: Python tools check
+        run: |
+          python3 tests/test_cuda_artifacts.py
+          python3 tools/generate_demand.py --network data/networks/sf_bay_area \
+            --num-trips 100 --model uniform --seed 1 --output /dev/null
+          python3 tools/partition_network.py --network data/networks/sf_bay_area \
+            --num-parts 2 --method spatial --output /dev/null
