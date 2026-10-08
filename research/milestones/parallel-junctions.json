@@ -1,0 +1,77 @@
+{
+  "id": "parallel-junctions",
+  "title": "Parallel junction pipeline and serial equivalence",
+  "status": "validated-recorded-cases",
+  "preservation_commit": "a7591956eb9ca955b861623f5e83b1ccfadf881f",
+  "original_locations": [
+    "artifacts/junction_parallel_20261007"
+  ],
+  "backup": "../../backups/20261008/workspace.tar.gz",
+  "note": "Preservation commit is not necessarily the original run commit. Original provenance is retained inside each package.",
+  "path": "milestones/parallel-junctions",
+  "files": 537,
+  "preservation_replay": {
+    "case": "network_20",
+    "passed": true,
+    "behavioral_metrics": {
+      "completed": {
+        "expected": 20,
+        "actual": 20,
+        "match": true
+      },
+      "active": {
+        "expected": 0,
+        "actual": 0,
+        "match": true
+      },
+      "pending": {
+        "expected": 0,
+        "actual": 0,
+        "match": true
+      },
+      "steps": {
+        "expected": 2400,
+        "actual": 2400,
+        "match": true
+      },
+      "gap_failures": {
+        "expected": 0,
+        "actual": 0,
+        "match": true
+      },
+      "conflict_failures": {
+        "expected": 0,
+        "actual": 0,
+        "match": true
+      },
+      "invalid_states": {
+        "expected": 0,
+        "actual": 0,
+        "match": true
+      },
+      "stopped_in_junction_samples": {
+        "expected": 0,
+        "actual": 0,
+        "match": true
+      },
+      "entries": {
+        "expected": 67,
+        "actual": 67,
+        "match": true
+      },
+      "right_on_red_entries": {
+        "expected": 8,
+        "actual": 8,
+        "match": true
+      }
+    },
+    "byte_identical_files": {
+      "states.csv": true,
+      "events.csv": true,
+      "signals.csv": true
+    },
+    "timing_compared": false
+  },
+  "reports": [],
+  "viewers": []
+}

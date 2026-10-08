@@ -1,0 +1,376 @@
+{
+  "archive_location": "../research-archive",
+  "inventory_sha256": "098bcf2b9d9962b680aa3d6003e67db6187d81a16a690b5ebc86f660c5da2260",
+  "milestones": [
+    {
+      "id": "berkeley-baseline",
+      "title": "Berkeley baseline and lane review",
+      "status": "historical-provenance-incomplete",
+      "preservation_commit": "a7591956eb9ca955b861623f5e83b1ccfadf881f",
+      "original_locations": [
+        "artifacts/berkeley-lane-review",
+        "reports/berkeley-baseline",
+        "reports/berkeley-full-formatted",
+        "reports/berkeley-performance",
+        "reports/berkeley-performance-20260930",
+        "reports/berkeley-performance-final",
+        "reports/berkeley-sample-input",
+        "reports/berkeley-sample-report"
+      ],
+      "backup": "../../backups/20261008/workspace.tar.gz",
+      "note": "Preservation commit is not necessarily the original run commit. Original provenance is retained inside each package.",
+      "path": "milestones/berkeley-baseline",
+      "files": 373,
+      "preservation_replay": {
+        "passed": null,
+        "reason": "Original Berkeley build/seed provenance incomplete; recordings preserved without claiming rerun equivalence."
+      },
+      "reports": [
+        "milestones/berkeley-baseline/reports/berkeley-performance/report.pdf",
+        "milestones/berkeley-baseline/reports/berkeley-baseline/report.pdf",
+        "milestones/berkeley-baseline/reports/berkeley-full-formatted/LPSim-full-report.pdf",
+        "milestones/berkeley-baseline/reports/berkeley-performance-final/report.pdf",
+        "milestones/berkeley-baseline/reports/berkeley-sample-report/report.pdf"
+      ],
+      "viewers": []
+    },
+    {
+      "id": "lane-preserving-following",
+      "title": "Lane-preserving connectors and safe following",
+      "status": "validated-recorded-cases",
+      "preservation_commit": "a7591956eb9ca955b861623f5e83b1ccfadf881f",
+      "original_locations": [
+        "artifacts/junction_platoons_20261007",
+        "reports/san-pablo-platoons-20261007"
+      ],
+      "backup": "../../backups/20261008/workspace.tar.gz",
+      "note": "Preservation commit is not necessarily the original run commit. Original provenance is retained inside each package.",
+      "path": "milestones/lane-preserving-following",
+      "files": 761,
+      "preservation_replay": {
+        "case": "network_20",
+        "passed": true,
+        "behavioral_metrics": {
+          "completed": {
+            "expected": 20,
+            "actual": 20,
+            "match": true
+          },
+          "active": {
+            "expected": 0,
+            "actual": 0,
+            "match": true
+          },
+          "pending": {
+            "expected": 0,
+            "actual": 0,
+            "match": true
+          },
+          "steps": {
+            "expected": 2400,
+            "actual": 2400,
+            "match": true
+          },
+          "gap_failures": {
+            "expected": 0,
+            "actual": 0,
+            "match": true
+          },
+          "conflict_failures": {
+            "expected": 0,
+            "actual": 0,
+            "match": true
+          },
+          "invalid_states": {
+            "expected": 0,
+            "actual": 0,
+            "match": true
+          },
+          "stopped_in_junction_samples": {
+            "expected": 0,
+            "actual": 0,
+            "match": true
+          },
+          "entries": {
+            "expected": 67,
+            "actual": 67,
+            "match": true
+          },
+          "right_on_red_entries": {
+            "expected": 8,
+            "actual": 8,
+            "match": true
+          }
+        },
+        "byte_identical_files": {
+          "states.csv": true,
+          "events.csv": true,
+          "signals.csv": true
+        },
+        "timing_compared": false
+      },
+      "reports": [
+        "milestones/lane-preserving-following/reports/san-pablo-platoons-20261007/San-Pablo-Physical-Junctions.pdf"
+      ],
+      "viewers": [
+        "milestones/lane-preserving-following/reports/san-pablo-platoons-20261007/web/"
+      ]
+    },
+    {
+      "id": "occupancy-fix",
+      "title": "Occupancy reservation and rollback fix",
+      "status": "validated-recorded-cases",
+      "preservation_commit": "a7591956eb9ca955b861623f5e83b1ccfadf881f",
+      "original_locations": [
+        "artifacts/occupancy_fix_20261004",
+        "reports/san-pablo-occupancy-fix-20261006"
+      ],
+      "backup": "../../backups/20261008/workspace.tar.gz",
+      "note": "Preservation commit is not necessarily the original run commit. Original provenance is retained inside each package.",
+      "path": "milestones/occupancy-fix",
+      "files": 377,
+      "preservation_replay": {
+        "case": "network_20",
+        "passed": true,
+        "behavioral_metrics": {
+          "completed": {
+            "expected": 20,
+            "actual": 20,
+            "match": true
+          },
+          "active": {
+            "expected": 0,
+            "actual": 0,
+            "match": true
+          },
+          "pending": {
+            "expected": 0,
+            "actual": 0,
+            "match": true
+          },
+          "steps": {
+            "expected": 1200,
+            "actual": 1200,
+            "match": true
+          }
+        },
+        "byte_identical_files": {
+          "signals.csv": true,
+          "trajectories.csv": true
+        },
+        "timing_compared": false
+      },
+      "reports": [
+        "milestones/occupancy-fix/reports/san-pablo-occupancy-fix-20261006/San-Pablo-Occupancy-Fix.pdf"
+      ],
+      "viewers": [
+        "milestones/occupancy-fix/reports/san-pablo-occupancy-fix-20261006/web/"
+      ]
+    },
+    {
+      "id": "parallel-junctions",
+      "title": "Parallel junction pipeline and serial equivalence",
+      "status": "validated-recorded-cases",
+      "preservation_commit": "a7591956eb9ca955b861623f5e83b1ccfadf881f",
+      "original_locations": [
+        "artifacts/junction_parallel_20261007"
+      ],
+      "backup": "../../backups/20261008/workspace.tar.gz",
+      "note": "Preservation commit is not necessarily the original run commit. Original provenance is retained inside each package.",
+      "path": "milestones/parallel-junctions",
+      "files": 537,
+      "preservation_replay": {
+        "case": "network_20",
+        "passed": true,
+        "behavioral_metrics": {
+          "completed": {
+            "expected": 20,
+            "actual": 20,
+            "match": true
+          },
+          "active": {
+            "expected": 0,
+            "actual": 0,
+            "match": true
+          },
+          "pending": {
+            "expected": 0,
+            "actual": 0,
+            "match": true
+          },
+          "steps": {
+            "expected": 2400,
+            "actual": 2400,
+            "match": true
+          },
+          "gap_failures": {
+            "expected": 0,
+            "actual": 0,
+            "match": true
+          },
+          "conflict_failures": {
+            "expected": 0,
+            "actual": 0,
+            "match": true
+          },
+          "invalid_states": {
+            "expected": 0,
+            "actual": 0,
+            "match": true
+          },
+          "stopped_in_junction_samples": {
+            "expected": 0,
+            "actual": 0,
+            "match": true
+          },
+          "entries": {
+            "expected": 67,
+            "actual": 67,
+            "match": true
+          },
+          "right_on_red_entries": {
+            "expected": 8,
+            "actual": 8,
+            "match": true
+          }
+        },
+        "byte_identical_files": {
+          "states.csv": true,
+          "events.csv": true,
+          "signals.csv": true
+        },
+        "timing_compared": false
+      },
+      "reports": [],
+      "viewers": []
+    },
+    {
+      "id": "physical-junctions",
+      "title": "Physical junctions and conservative reservations",
+      "status": "validated-with-capacity-limitations",
+      "preservation_commit": "a7591956eb9ca955b861623f5e83b1ccfadf881f",
+      "original_locations": [
+        "artifacts/junction_behavior_20261006",
+        "reports/san-pablo-junctions-20261006"
+      ],
+      "backup": "../../backups/20261008/workspace.tar.gz",
+      "note": "Preservation commit is not necessarily the original run commit. Original provenance is retained inside each package.",
+      "path": "milestones/physical-junctions",
+      "files": 243,
+      "preservation_replay": {
+        "case": "network_20",
+        "passed": true,
+        "behavioral_metrics": {
+          "completed": {
+            "expected": 20,
+            "actual": 20,
+            "match": true
+          },
+          "active": {
+            "expected": 0,
+            "actual": 0,
+            "match": true
+          },
+          "pending": {
+            "expected": 0,
+            "actual": 0,
+            "match": true
+          },
+          "steps": {
+            "expected": 2400,
+            "actual": 2400,
+            "match": true
+          },
+          "gap_failures": {
+            "expected": 0,
+            "actual": 0,
+            "match": true
+          },
+          "conflict_failures": {
+            "expected": 0,
+            "actual": 0,
+            "match": true
+          },
+          "invalid_states": {
+            "expected": 0,
+            "actual": 0,
+            "match": true
+          },
+          "stopped_in_junction_samples": {
+            "expected": 0,
+            "actual": 0,
+            "match": true
+          },
+          "entries": {
+            "expected": 102,
+            "actual": 102,
+            "match": true
+          },
+          "right_on_red_entries": {
+            "expected": 6,
+            "actual": 6,
+            "match": true
+          }
+        },
+        "byte_identical_files": {
+          "states.csv": true,
+          "events.csv": true,
+          "signals.csv": true
+        },
+        "timing_compared": false
+      },
+      "reports": [
+        "milestones/physical-junctions/reports/san-pablo-junctions-20261006/San-Pablo-Physical-Junctions.pdf"
+      ],
+      "viewers": [
+        "milestones/physical-junctions/reports/san-pablo-junctions-20261006/web/"
+      ]
+    },
+    {
+      "id": "san-pablo-reduction",
+      "title": "Reduced San Pablo network and synchronized signals",
+      "status": "known-dense-occupancy-failures",
+      "preservation_commit": "a7591956eb9ca955b861623f5e83b1ccfadf881f",
+      "original_locations": [
+        "artifacts/san_pablo_university_20261004"
+      ],
+      "backup": "../../backups/20261008/workspace.tar.gz",
+      "note": "Preservation commit is not necessarily the original run commit. Original provenance is retained inside each package.",
+      "path": "milestones/san-pablo-reduction",
+      "files": 267,
+      "preservation_replay": {
+        "case": "network_20",
+        "passed": true,
+        "behavioral_metrics": {
+          "completed": {
+            "expected": 20,
+            "actual": 20,
+            "match": true
+          },
+          "active": {
+            "expected": 0,
+            "actual": 0,
+            "match": true
+          },
+          "pending": {
+            "expected": 0,
+            "actual": 0,
+            "match": true
+          },
+          "steps": {
+            "expected": 1200,
+            "actual": 1200,
+            "match": true
+          }
+        },
+        "byte_identical_files": {
+          "signals.csv": true,
+          "trajectories.csv": true
+        },
+        "timing_compared": false
+      },
+      "reports": [],
+      "viewers": []
+    }
+  ]
+}

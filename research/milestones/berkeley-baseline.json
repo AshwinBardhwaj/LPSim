@@ -1,0 +1,32 @@
+{
+  "id": "berkeley-baseline",
+  "title": "Berkeley baseline and lane review",
+  "status": "historical-provenance-incomplete",
+  "preservation_commit": "a7591956eb9ca955b861623f5e83b1ccfadf881f",
+  "original_locations": [
+    "artifacts/berkeley-lane-review",
+    "reports/berkeley-baseline",
+    "reports/berkeley-full-formatted",
+    "reports/berkeley-performance",
+    "reports/berkeley-performance-20260930",
+    "reports/berkeley-performance-final",
+    "reports/berkeley-sample-input",
+    "reports/berkeley-sample-report"
+  ],
+  "backup": "../../backups/20261008/workspace.tar.gz",
+  "note": "Preservation commit is not necessarily the original run commit. Original provenance is retained inside each package.",
+  "path": "milestones/berkeley-baseline",
+  "files": 373,
+  "preservation_replay": {
+    "passed": null,
+    "reason": "Original Berkeley build/seed provenance incomplete; recordings preserved without claiming rerun equivalence."
+  },
+  "reports": [
+    "milestones/berkeley-baseline/reports/berkeley-performance/report.pdf",
+    "milestones/berkeley-baseline/reports/berkeley-baseline/report.pdf",
+    "milestones/berkeley-baseline/reports/berkeley-full-formatted/LPSim-full-report.pdf",
+    "milestones/berkeley-baseline/reports/berkeley-performance-final/report.pdf",
+    "milestones/berkeley-baseline/reports/berkeley-sample-report/report.pdf"
+  ],
+  "viewers": []
+}
