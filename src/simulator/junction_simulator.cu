@@ -187,8 +187,13 @@ void runJunctionSimulation(const char* scenario){
  traj<<std::setprecision(9);events<<std::setprecision(9);
  unsigned long long gapFailures=0,conflictFailures=0,invalid=0,insideStops=0,redTurns=0,entries=0,deniedSpace=0,deniedYield=0;double calc=0,advanceMs=0,junctionMs=0;int maxSame=0;
  cudaEvent_t ev0,ev1,ev2;check(cudaEventCreate(&ev0));check(cudaEventCreate(&ev1));check(cudaEventCreate(&ev2));
+ std::ofstream stepMetrics("step_metrics.csv");
+ stepMetrics<<"time,requested,pending,not_departed,road_stopped,road_moving,connector,completed,entries,spawned,completed_step,blocked_space,blocked_conflict_or_yield,advance_gpu_ms,junction_gpu_ms\n";
  int steps=int(std::round(duration/dt));
  for(int step=0;step<steps;++step){float t=step*dt;
+  int prePending=0,preFuture=0,preStopped=0,preMoving=0,preConnector=0,preCompleted=0;
+  for(const auto& c:cars){prePending+=c.state==0;preFuture+=c.state==0&&c.departure>t;preStopped+=c.state==1&&c.v<.5f;preMoving+=c.state==1&&c.v>=.5f;preConnector+=c.state==2;preCompleted+=c.state==3;}
+  const auto beforeEntries=entries,beforeSpace=deniedSpace,beforeYield=deniedYield;
   auto start=std::chrono::steady_clock::now();check(cudaEventRecord(ev0));advance<<<(n+127)/128,128>>>(a,b,n,dr,dm,dc,nm,t,dt,mode,exclusive);check(cudaGetLastError());check(cudaEventRecord(ev1));if(parallel){
    prepareJunctions<<<(std::max(n,512)+127)/128,128>>>(b,n,dm,dt,ds);check(cudaGetLastError());
    summarizeJunctions<<<(n+127)/128,128>>>(b,n,dr,dm,t,mode,ds);check(cudaGetLastError());
@@ -203,6 +208,7 @@ void runJunctionSimulation(const char* scenario){
    if(c.event==1||c.event==2){auto m=moves[c.mid];entries++;redTurns+=c.event==2;events<<t+dt<<','<<i<<','<<c.event<<','<<c.mid<<','<<m.turn<<','<<m.axis<<','<<indication(m,t,mode)<<','<<c.entryWait<<'\n';}
    if((step+1)%2==0&&(c.state==1||c.state==2))traj<<t+dt<<','<<i<<','<<c.state<<','<<c.edges[c.k]<<','<<c.lanes[c.k]<<','<<c.mid<<','<<c.pos<<','<<c.v<<'\n';
   }
+  stepMetrics<<t<<','<<n<<','<<prePending<<','<<preFuture<<','<<preStopped<<','<<preMoving<<','<<preConnector<<','<<preCompleted<<','<<entries-beforeEntries<<','<<prePending-pending<<','<<completed-preCompleted<<','<<deniedSpace-beforeSpace<<','<<deniedYield-beforeYield<<','<<am<<','<<jm<<'\n';
   std::vector<std::pair<int,float>> lanePositions;std::vector<int> occupiedMovements;
   for(const auto& c:cars){if(c.state==1)lanePositions.emplace_back(c.edges[c.k]*16+c.lanes[c.k],c.pos);if(c.state==2){occupiedMovements.push_back(c.mid);lanePositions.emplace_back(10000+c.mid,c.pos);}}
   std::sort(lanePositions.begin(),lanePositions.end());

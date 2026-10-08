@@ -1,0 +1,13 @@
+{
+  "synthetic": true,
+  "corridors": 32,
+  "lanes_per_corridor": 2,
+  "road_lengths_m": [
+    150,
+    150,
+    150
+  ],
+  "connector_length_m": 16,
+  "speed_limit_mps": 13.4,
+  "purpose": "No crossing conflicts; replicated corridors supply exit/admission capacity at unchanged departure times. Not a Berkeley geometric comparison."
+}
