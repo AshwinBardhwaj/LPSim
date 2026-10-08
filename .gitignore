@@ -52,3 +52,7 @@ Makefile
 LivingCity/obj/
 LivingCity/
 build/
+
+# Reproducible experiment outputs (generated locally)
+/artifacts/
+/reports/

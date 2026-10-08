@@ -5,6 +5,8 @@
 #include <string>
 
 #include "cli_runner.h"
+#include "junction_simulator.h"
+#include <cstdlib>
 
 #include "lpsim/benchmarker.h"
 
@@ -26,6 +28,10 @@ namespace LC {
 using namespace std::chrono;
 
 void B18CommandLineVersion::runB18Simulation() {
+  if (const char* scenario = std::getenv("LPSIM_JUNCTION_SCENARIO")) {
+    runJunctionSimulation(scenario);
+    return;
+  }
   // Look for config in CWD/data/ first, then next to binary (legacy)
   QString configPath = QDir::currentPath() + "/data/command_line_options.ini";
   if (!QFile::exists(configPath)) {

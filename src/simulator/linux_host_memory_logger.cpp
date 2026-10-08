@@ -8,7 +8,6 @@
 const std::string log_file_path = "memory-consumption.csv";
 
 LinuxHostMemoryLogger::LinuxHostMemoryLogger(const int & seconds, const std::string & message) :
-    log_thread_(Spawn()),
     cancellation_token_(false),
     delta_(std::chrono::seconds(seconds)),
     message_(message),
@@ -16,6 +15,7 @@ LinuxHostMemoryLogger::LinuxHostMemoryLogger(const int & seconds, const std::str
 {
     log_file_stream_.open(log_file_path);
     if (log_file_stream_.fail()) { cancellation_token_ = true; }
+    log_thread_ = Spawn();
 }
 
 void LinuxHostMemoryLogger::LogMemory()
