@@ -1,5 +1,5 @@
 {
-  "source": "/home/ashwinb/Documents/sim_gpu_accel/LPSim/data/networks/san_pablo_university_small",
+  "source": "data/networks/san_pablo_university_small",
   "internal_nodes_grouped": [
     [
       0,
