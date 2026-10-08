@@ -1,0 +1,16 @@
+{
+  "source": "cache/ea1901ac2671a60e1651aab79db516ee19d0cb59.json",
+  "source_sha256": "02fa7633024c6db041eb5d044e1a77ea71dd15da0a710effd27be86ca68ef790",
+  "osm_timestamp": "2026-09-17T06:08:36Z",
+  "attribution": "The data included in this document is from www.openstreetmap.org. The data is made available under ODbL.",
+  "bbox": [
+    -122.2955,
+    37.8665,
+    -122.289,
+    37.8718
+  ],
+  "nodes": 13,
+  "edges": 11,
+  "connectivity": "all",
+  "signal_assumption": "all junctions, synchronized red [0,20), green [20,40), absolute seconds"
+}

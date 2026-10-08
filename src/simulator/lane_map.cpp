@@ -244,7 +244,7 @@ void B18TrafficLaneMap::createLaneMapSP_n(int ngpus, const std::vector<int>verte
   RoadGraph::in_roadGraphEdgeIter_BI Iei, Iei_end;
   RoadGraph::out_roadGraphEdgeIter_BI Oei, Oei_end;
   //intersections.resize(boost::num_vertices(inRoadGraph.myRoadGraph_BI));//as many as vertices
-  intersections.resize(graph_->vertex_edges_.size());//as many as vertices
+  intersections.resize(graph_->edge_ids_.size());//as many as vertices
   //std::cout << "intersections size = " << intersections.size() << "\n";
   trafficLights.assign(tNumMapWidth, 0);
   //trafficLights.resize(tNumMapWidth); // we could use tNumLanes but then the edge number would not match and we would need to add logic.
@@ -257,7 +257,7 @@ void B18TrafficLaneMap::createLaneMapSP_n(int ngpus, const std::vector<int>verte
     for(int j=0;j < cnt_vertice_i; j++){
         intersections_n[i][j].nextEvent = 0.0f;
         int vertexId=partitions[i][j];
-        intersections_n[i][j].totalInOutEdges = graph_->vertex_edges_[vertexId].size();
+        intersections_n[i][j].totalInOutEdges = graph_->vertex_in_edges_[vertexId].size() + graph_->vertex_out_edges_[vertexId].size();
         if (intersections_n[i][j].totalInOutEdges <= 0) {
           printf("Vertex without in/out edges\n");
           continue;
@@ -599,7 +599,7 @@ void B18TrafficLaneMap::createLaneMapSP(const std::shared_ptr<abm::Graph>& graph
   RoadGraph::in_roadGraphEdgeIter_BI Iei, Iei_end;
   RoadGraph::out_roadGraphEdgeIter_BI Oei, Oei_end;
   //intersections.resize(boost::num_vertices(inRoadGraph.myRoadGraph_BI));//as many as vertices
-  intersections.resize(graph_->vertex_edges_.size());//as many as vertices
+  intersections.resize(graph_->edge_ids_.size());//as many as vertices
   //std::cout << "intersections size = " << intersections.size() << "\n";
   trafficLights.assign(tNumMapWidth, 0);
   //trafficLights.resize(tNumMapWidth); // we could use tNumLanes but then the edge number would not match and we would need to add logic.

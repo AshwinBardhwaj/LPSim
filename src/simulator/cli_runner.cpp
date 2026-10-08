@@ -5,6 +5,8 @@
 #include <string>
 
 #include "cli_runner.h"
+#include "junction_simulator.h"
+#include <cstdlib>
 
 #include "lpsim/benchmarker.h"
 
@@ -26,6 +28,10 @@ namespace LC {
 using namespace std::chrono;
 
 void B18CommandLineVersion::runB18Simulation() {
+  if (const char* scenario = std::getenv("LPSIM_JUNCTION_SCENARIO")) {
+    runJunctionSimulation(scenario);
+    return;
+  }
   // Look for config in CWD/data/ first, then next to binary (legacy)
   QString configPath = QDir::currentPath() + "/data/command_line_options.ini";
   if (!QFile::exists(configPath)) {
@@ -85,7 +91,7 @@ void B18CommandLineVersion::runB18Simulation() {
     // rerouteIncrementMins of 0 means static routing.
     // We set the rerouteIncrement as the maximum possible, so it only routes once
     float totalMinsSimulation = (endSimulationH - startSimulationH) * 60;
-    rerouteIncrementMins = int(totalMinsSimulation);
+    rerouteIncrementMins = std::max(1, int(std::ceil(totalMinsSimulation)));
     std::cout << "Since the reroute increment is 0, static routing will be used." << std::endl;
   } else {
     std::cout << "Rerouting every " << rerouteIncrementMins << " minutes" << std::endl;
@@ -135,12 +141,12 @@ void B18CommandLineVersion::runB18Simulation() {
   std::ifstream infile(partitionFileName);
   if (!infile) {
         std::cerr << "Cannot open partitions file:" << partitionFileName<<" Use default eqaul division"<< std::endl;
-        partitions.resize(street_graph->vertex_edges_.size());
+        partitions.resize(street_graph->edge_ids_.size());
         // default: eqaul division
         for (int i = 0; i < ngpus; ++i) {
-        int partitionSize = street_graph->vertex_edges_.size() / ngpus;
+        int partitionSize = street_graph->edge_ids_.size() / ngpus;
         int startIndex = i * partitionSize;
-        int endIndex = (i == ngpus - 1) ? street_graph->vertex_edges_.size() : (i + 1) * partitionSize;
+        int endIndex = (i == ngpus - 1) ? street_graph->edge_ids_.size() : (i + 1) * partitionSize;
         std::fill(partitions.begin() + startIndex, partitions.begin() + endIndex, i);
         }
   }

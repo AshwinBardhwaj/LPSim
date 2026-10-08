@@ -54,5 +54,12 @@ extern void b18SimulateTrafficCUDA(float currentTime, uint numPeople,
                                    uint numIntersections_n[], float deltaTime, const parameters simParameters,
                                    int numBlocks, int threadsPerBlock);
 
+// Compact, read-only snapshot; path indices refer to the global CUDA route array.
+#include "trajectory_sample.h"
+extern void b18GetTrajectoryCUDA(std::vector<B18TrajectorySample>& samples);
+
 #endif // B18_TRAFFIC_SIMULATION_H
 
+
+// Diagnostic snapshot in GPU-local lane indexing.
+void b18GetSignalsCUDA(std::vector<std::vector<unsigned char>>& signalStates);

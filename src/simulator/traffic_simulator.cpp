@@ -3,6 +3,11 @@
 #pragma once
 #include "traffic_simulator.h"
 #include <assert.h>
+#include <cstdlib>
+#include <chrono>
+#include <fstream>
+#include <iomanip>
+#include <limits>
 
 #include "lpsim/benchmarker.h"
 
@@ -404,13 +409,38 @@ void B18TrafficSimulator::simulateInGPU(const int ngpus, const int numOfPasses, 
       trafficVehicleVec[i].indexPathInit = INIT_EDGE_INDEX_NOT_SET;
     }
       
+    // Opt-in: full timestep recording has a device-to-host and disk I/O cost.
+    std::ofstream signalFile;
+    std::vector<std::vector<unsigned char>> signalSnapshot;
+    if (const char* output = std::getenv("LPSIM_SIGNALS")) {
+      signalFile.open(output);
+      if (!signalFile) throw std::runtime_error("Cannot open signal output");
+      signalFile << "step_start,edge_id,lane_idx,green\n";
+    }
+    std::ofstream trajectoryFile;
+    std::map<uint, uint> physicalEdgeByLane;
+    std::vector<B18TrajectorySample> trajectorySamples;
+    if (const char* output = std::getenv("LPSIM_TRAJECTORIES")) {
+      if (!useSP) throw std::runtime_error("Trajectory export requires SP network routing");
+      std::string filename(output);
+      if (numOfPasses > 1) filename += ".pass" + std::to_string(nP);
+      trajectoryFile.open(filename);
+      if (!trajectoryFile) throw std::runtime_error("Cannot open trajectory output: " + filename);
+      trajectoryFile << "vehicle_id,timestamp,edge_id,route_index,lane_idx,pos_m,speed,edge_id_kind,lane_change_attempted,lane_change_gap_rejected\n";
+      trajectoryFile << std::setprecision(std::numeric_limits<float>::max_digits10);
+      for (const auto& outgoing : graph_->edge_ids_)
+        for (const auto& edge : outgoing)
+          physicalEdgeByLane.emplace(edgeIdToLaneMapNum.at(edge.second), edge.second);
+    }
+    double calculationSeconds = 0.0, recordingSeconds = 0.0;
+    unsigned long long measuredSteps = 0;
     std::cerr << "Starting simulation ..." << std::endl;
     std::vector<uint> allPathsInEdgesCUDAFormat;
     while (currentTime < endTimeSecs) {
       updateEdgeImpedances(graph_, increment_index);
       
       float currentBatchStartTimeSecs = startTimeSecs + increment_index * rerouteIncrementMins * 60;
-      float currentBatchEndTimeSecs = startTimeSecs + (increment_index + 1) * rerouteIncrementMins * 60;
+      float currentBatchEndTimeSecs = std::min(endTimeSecs, startTimeSecs + (increment_index + 1) * rerouteIncrementMins * 60);
 
       auto currentBatchPathsInVertexes = B18TrafficSP::RoutingWrapper(all_od_pairs, graph_, dep_times,
                                             currentBatchStartTimeSecs, currentBatchEndTimeSecs,
@@ -465,11 +495,43 @@ void B18TrafficSimulator::simulateInGPU(const int ngpus, const int numOfPasses, 
       while (currentTime < currentBatchEndTimeSecs) {
         printProgressBar(progress);
         float nextMilestone = currentBatchStartTimeSecs + (progress + 0.1) * (currentBatchEndTimeSecs - currentBatchStartTimeSecs);
-        while(currentTime < nextMilestone) {
+        while(currentTime < nextMilestone && currentTime < currentBatchEndTimeSecs && currentTime < endTimeSecs) {
           
+          const auto calculationStart = std::chrono::steady_clock::now();
           b18SimulateTrafficCUDA(currentTime, trafficVehicleVec.size(),
                               intersections_size_n, deltaTime, simParameters, numBlocks, threadsPerBlock);
            
+          const auto recordingStart = std::chrono::steady_clock::now();
+          calculationSeconds += std::chrono::duration<double>(recordingStart - calculationStart).count();
+          ++measuredSteps;
+          if (signalFile.is_open()) {
+            b18GetSignalsCUDA(signalSnapshot);
+            for (const auto& outgoing : graph_->edge_ids_) {
+              for (const auto& edge : outgoing) {
+                const uint globalLane = edgeIdToLaneMapNum.at(edge.second);
+                const int gpu = vertexIdToPar.at(edge.first);
+                const uint localLane = laneIdToLaneIdInGpu[gpu].at(globalLane);
+                for (uint lane = 0; lane < edgesData_n[gpu][localLane].numLines; ++lane)
+                  signalFile << currentTime << ',' << edge.second << ',' << lane << ','
+                      << (signalSnapshot[gpu].at(localLane + lane) == 0xFF) << '\n';
+              }
+            }
+          }
+          if (trajectoryFile.is_open()) {
+            b18GetTrajectoryCUDA(trajectorySamples);
+            for (const auto& sample : trajectorySamples) {
+              if (sample.active != 1 || sample.pathCurr < sample.pathInit ||
+                  sample.pathCurr >= allPathsInEdgesCUDAFormat.size()) continue;
+              const auto physical = physicalEdgeByLane.find(allPathsInEdgesCUDAFormat[sample.pathCurr]);
+              if (physical == physicalEdgeByLane.end()) continue; // END_OF_PATH is not geometry.
+              trajectoryFile << sample.vehicleId << ',' << currentTime + deltaTime << ','
+                  << physical->second << ',' << sample.pathCurr - sample.pathInit << ','
+                  << sample.lane << ',' << sample.position << ',' << sample.speed
+                  << ",uniqueid," << sample.laneChangeAttempted << ',' << sample.laneChangeGapRejected << '\n';
+            }
+            if (!trajectoryFile) throw std::runtime_error("Failed writing trajectory output");
+          }
+          recordingSeconds += std::chrono::duration<double>(std::chrono::steady_clock::now() - recordingStart).count();
           currentTime += deltaTime;
           // if(currentTime>18030)break;
         }
@@ -494,6 +556,19 @@ void B18TrafficSimulator::simulateInGPU(const int ngpus, const int numOfPasses, 
 
       printFullProgressBar();
 
+      if (const char* metrics = std::getenv("LPSIM_METRICS")) {
+        std::ofstream out(metrics);
+        unsigned completed = 0, active = 0, pending = 0;
+        for (const auto& vehicle : trafficVehicleVec) {
+          completed += vehicle.active == 2;
+          active += vehicle.active == 1;
+          pending += vehicle.active == 0;
+        }
+        out << std::setprecision(12) << "{\"calculation_seconds\":" << calculationSeconds
+            << ",\"recording_seconds\":" << recordingSeconds << ",\"steps\":" << measuredSteps
+            << ",\"completed\":" << completed << ",\"active\":" << active
+            << ",\"pending\":" << pending << "}\n";
+      }
       microsimulationInGPU.stopAndEndBenchmark();
       increment_index++;
 

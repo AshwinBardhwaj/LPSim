@@ -5,16 +5,16 @@
 #   ./tools/profile_sim.sh [nsys|ncu|both] [output_prefix]
 #
 # Prerequisites: nsys and/or ncu in PATH (CUDA Toolkit 12.x)
-# Run from the LivingCity/ directory after building.
+# Run from the LPSim repository directory after building.
 
 set -euo pipefail
 
 MODE=${1:-nsys}
 PREFIX=${2:-lpsim_profile}
-BINARY="./LivingCity"
+BINARY="${LPSIM_BINARY:-./build/lpsim}"
 
 if [ ! -f "$BINARY" ]; then
-    echo "Error: $BINARY not found. Build first with: qmake && make -j"
+    echo "Error: $BINARY not found. Build first with: cmake --build build -j2"
     exit 1
 fi
 
@@ -29,7 +29,7 @@ profile_nsys() {
         --trace cuda,nvtx,osrt \
         --force-overwrite true \
         --stats true \
-        $BINARY 2>&1 | tee "${PREFIX}_nsys.log"
+        "$BINARY" 2>&1 | tee "${PREFIX}_nsys.log"
     echo ""
     echo "[nsys] Timeline saved to: ${PREFIX}_timeline.nsys-rep"
     echo "  View with: nsys-ui ${PREFIX}_timeline.nsys-rep"
@@ -42,12 +42,14 @@ profile_ncu() {
         --output "${PREFIX}_kernels" \
         --set full \
         --kernel-name "kernel_trafficSimulation" \
+        --launch-skip "${LPSIM_PROFILE_SKIP:-0}" \
         --launch-count 5 \
         --target-processes all \
-        $BINARY 2>&1 | tee "${PREFIX}_ncu.log"
+        "$BINARY" 2>&1 | tee "${PREFIX}_ncu.log"
     echo ""
     echo "[ncu] Kernel metrics saved to: ${PREFIX}_kernels.ncu-rep"
     echo "  View with: ncu-ui ${PREFIX}_kernels.ncu-rep"
+    ncu --import "${PREFIX}_kernels.ncu-rep" --csv --page raw > "${PREFIX}_kernels.csv"
     echo ""
     echo "Key metrics to check:"
     echo "  - sm__throughput.avg_pct_of_peak_sustained_elapsed (compute util)"

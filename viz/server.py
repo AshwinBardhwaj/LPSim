@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
 LPSim Web Visualizer: serves network + simulation state via HTTP.
-
-Run: python viz/server.py --network data/networks/sf_bay_area --port 8080
+Run:
+  python viz/server.py --network data/networks/sf_bay_area --port 8080
 Then open http://localhost:8080 in a browser.
 """
 
@@ -10,12 +10,31 @@ import argparse
 import csv
 import json
 import os
+import re
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
 
 
+def parse_wkt_linestring(wkt_str):
+    """Parse WKT LINESTRING (x1 y1, x2 y2, ...) into [[lon, lat], ...]."""
+    if not wkt_str:
+        return None
+    match = re.fullmatch(r"LINESTRING\s*\((.*)\)", wkt_str.strip(), re.I)
+    if not match:
+        return None
+    try:
+        points = []
+        for pair in match[1].split(","):
+            parts = pair.strip().split()
+            if len(parts) >= 2:
+                points.append([float(parts[0]), float(parts[1])])
+        return points if len(points) >= 2 else None
+    except Exception:
+        return None
+
+
 def load_network_geojson(network_path):
-    """Convert network CSV to GeoJSON for deck.gl rendering."""
+    """Convert network CSV to GeoJSON for deck.gl rendering with true curve geometry."""
     nodes_file = os.path.join(network_path, "nodes.csv")
     edges_file = os.path.join(network_path, "edges.csv")
 
@@ -25,7 +44,9 @@ def load_network_geojson(network_path):
         has_index = "index" in reader.fieldnames
         for i, row in enumerate(reader):
             idx = int(row["index"]) if has_index else i
-            nodes[idx] = {"lon": float(row["x"]), "lat": float(row["y"])}
+            lon = float(row.get("lon", row.get("x", 0.0)))
+            lat = float(row.get("lat", row.get("y", 0.0)))
+            nodes[idx] = {"lon": lon, "lat": lat}
 
     edges_features = []
     with open(edges_file) as f:
@@ -33,22 +54,28 @@ def load_network_geojson(network_path):
         cols = reader.fieldnames
         has_uv = "u" in cols and "v" in cols
         for row in reader:
-            if has_uv:
-                u, v = int(row["u"]), int(row["v"])
-            else:
+            if not has_uv:
                 continue
+            u, v = int(row["u"]), int(row["v"])
             if u not in nodes or v not in nodes:
                 continue
+
             src = nodes[u]
             dst = nodes[v]
+
+            # Parse intermediate curved coordinates if available; fallback to chord
+            coords = parse_wkt_linestring(row.get("geometry", ""))
+            if not coords:
+                coords = [
+                    [src["lon"], src["lat"]],
+                    [dst["lon"], dst["lat"]]
+                ]
+
             edges_features.append({
                 "type": "Feature",
                 "geometry": {
                     "type": "LineString",
-                    "coordinates": [
-                        [src["lon"], src["lat"]],
-                        [dst["lon"], dst["lat"]]
-                    ]
+                    "coordinates": coords
                 },
                 "properties": {
                     "id": int(row.get("uniqueid", 0)),
@@ -81,8 +108,20 @@ class VizHandler(SimpleHTTPRequestHandler):
         elif self.path == "/api/status":
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
+            self.send_header("Access-Control-Allow-Origin", "*")
             self.end_headers()
             self.wfile.write(json.dumps({"status": "ready"}).encode())
+        elif self.path == "/api/routes":
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            routes_path = Path("viz/routes.geojson")
+            if routes_path.exists():
+                with routes_path.open("rb") as f:
+                    self.wfile.write(f.read())
+            else:
+                self.wfile.write(json.dumps({"type": "FeatureCollection", "features": []}).encode())
         else:
             super().do_GET()
 

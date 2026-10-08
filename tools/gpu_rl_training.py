@@ -21,7 +21,7 @@ import numpy as np
 class GPUDispatchEnv:
     """RL environment backed by the actual LPSim CUDA simulator."""
 
-    def __init__(self, binary="build/lpsim", network="data/networks/sf_bay_area", num_trips=1000):
+    def __init__(self, binary="build/lpsim", network="data/networks/berkeley", num_trips=1000):
         self.binary = os.path.abspath(binary)
         self.network = network
         self.num_trips = num_trips

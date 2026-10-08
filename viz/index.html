@@ -12,28 +12,34 @@
         #container { width: 100vw; height: 100vh; position: relative; }
         #info-panel {
             position: absolute; top: 10px; left: 10px; z-index: 1;
-            background: rgba(0,0,0,0.8); color: #fff; padding: 15px;
+            background: rgba(0,0,0,0.85); color: #fff; padding: 15px;
             border-radius: 8px; max-width: 300px; font-size: 13px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
         }
         #info-panel h2 { margin: 0 0 8px 0; font-size: 16px; color: #4fc3f7; }
         #info-panel .stat { margin: 4px 0; }
         #info-panel .stat span { color: #81c784; font-weight: bold; }
         #legend { position: absolute; bottom: 20px; left: 10px; z-index: 1;
-            background: rgba(0,0,0,0.8); color: #fff; padding: 10px;
-            border-radius: 6px; font-size: 11px; }
-        .legend-item { display: flex; align-items: center; margin: 3px 0; }
+            background: rgba(0,0,0,0.85); color: #fff; padding: 12px;
+            border-radius: 6px; font-size: 11px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+        }
+        .legend-item { display: flex; align-items: center; margin: 4px 0; }
         .legend-color { width: 30px; height: 4px; margin-right: 8px; border-radius: 2px; }
     </style>
 </head>
 <body>
+    <a href="animated_sim/" style="position:fixed;top:12px;right:12px;z-index:100;background:#102030;color:white;padding:12px;border-radius:6px">Open recorded vehicle animation</a>
     <div id="container"></div>
     <div id="info-panel">
         <h2>LPSim Traffic Visualizer</h2>
         <div class="stat">Network: <span id="stat-edges">loading...</span> edges</div>
+        <div class="stat">Vehicles: <span id="stat-routes">loading...</span> routes</div>
         <div class="stat">Speed range: <span id="stat-speed">0-70</span> mph</div>
         <div class="stat">Status: <span id="stat-status">connecting...</span></div>
     </div>
     <div id="legend">
+        <div class="legend-item"><div class="legend-color" style="background: #00e5ff; height: 5px;"></div>Vehicle Routes</div>
         <div class="legend-item"><div class="legend-color" style="background: #d32f2f"></div>Slow (0-15 mph)</div>
         <div class="legend-item"><div class="legend-color" style="background: #ff9800"></div>Medium (15-35 mph)</div>
         <div class="legend-item"><div class="legend-color" style="background: #4caf50"></div>Fast (35-55 mph)</div>
@@ -41,27 +47,38 @@
     </div>
 
     <script>
-    const {DeckGL, GeoJsonLayer, ArcLayer} = deck;
+    const {DeckGL, GeoJsonLayer} = deck;
 
     function speedToColor(speed_mph) {
-        if (speed_mph < 15) return [211, 47, 47, 200];
-        if (speed_mph < 35) return [255, 152, 0, 180];
-        if (speed_mph < 55) return [76, 175, 80, 160];
-        return [33, 150, 243, 200];
+        if (speed_mph < 15) return [211, 47, 47, 100];
+        if (speed_mph < 35) return [255, 152, 0, 100];
+        if (speed_mph < 55) return [76, 175, 80, 90];
+        return [33, 150, 243, 120];
     }
 
     function speedToWidth(speed_mph, lanes) {
-        return Math.max(1, lanes * 0.8);
+        return Math.max(1, lanes * 0.7);
     }
 
     async function init() {
-        const response = await fetch('/api/network');
-        const networkData = await response.json();
+        // 1. Fetch network and route data concurrently
+        const [networkRes, routesRes] = await Promise.all([
+            fetch('/api/network'),
+            fetch('/api/routes')
+        ]);
+
+        if (!networkRes.ok || !routesRes.ok) {
+            window.location.replace('animated_sim/');
+            return;
+        }
+        const networkData = await networkRes.json();
+        const routesData = await routesRes.json();
 
         document.getElementById('stat-edges').textContent = networkData.features.length.toLocaleString();
+        document.getElementById('stat-routes').textContent = routesData.features.length.toLocaleString();
         document.getElementById('stat-status').textContent = 'ready';
 
-        // Compute center from data
+        // 2. Compute map center
         let sumLon = 0, sumLat = 0, count = 0;
         for (const f of networkData.features.slice(0, 1000)) {
             const coords = f.geometry.coordinates[0];
@@ -70,42 +87,77 @@
             count++;
         }
 
+        // 3. Initialize DeckGL with both layers
         const deckgl = new DeckGL({
             container: 'container',
             mapStyle: 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json',
             initialViewState: {
                 longitude: sumLon / count,
                 latitude: sumLat / count,
-                zoom: 10,
+                zoom: 12.5,
                 pitch: 45,
                 bearing: -10
             },
             controller: true,
             layers: [
+                // Base Road Network Layer
                 new GeoJsonLayer({
-                    id: 'network',
+                    id: 'network-layer',
                     data: networkData,
-                    lineWidthScale: 3,
+                    lineWidthScale: 2,
                     lineWidthMinPixels: 1,
                     getLineColor: f => speedToColor(f.properties.speed_mph),
                     getLineWidth: f => speedToWidth(f.properties.speed_mph, f.properties.lanes),
                     pickable: true,
                     autoHighlight: true,
-                    highlightColor: [255, 255, 0, 128],
+                    highlightColor: [255, 255, 255, 100],
+                }),
+                // Simulated Vehicle Route Traces Layer
+                new GeoJsonLayer({
+                    id: 'routes-layer',
+                    data: routesData,
+                    lineWidthScale: 3,
+                    lineWidthMinPixels: 2,
+                    getLineColor: [0, 229, 255, 180], // Bright cyan routes
+                    getLineWidth: 2,
+                    pickable: true,
+                    autoHighlight: true,
+                    highlightColor: [255, 255, 0, 255], // Highlighted yellow on hover
                 })
             ],
-            getTooltip: ({object}) => object && {
-                html: `<b>Edge ${object.properties.id}</b><br/>
-                       Speed limit: ${object.properties.speed_mph} mph<br/>
-                       Lanes: ${object.properties.lanes}<br/>
-                       Length: ${object.properties.length.toFixed(0)}m`,
-                style: {
-                    backgroundColor: '#1a1a2e',
-                    color: '#fff',
-                    fontSize: '12px',
-                    padding: '8px',
-                    borderRadius: '4px'
+            getTooltip: ({object}) => {
+                if (!object) return null;
+                const p = object.properties;
+                // Distinguish between hover over a vehicle route vs road edge
+                if (p.person_id !== undefined) {
+                    return {
+                        html: `<b>Vehicle ${p.person_id}</b><br/>
+                               Departure: ${p.dep_time.toFixed(1)}s<br/>
+                               Avg Speed: ${p.avg_speed.toFixed(1)} mph<br/>
+                               Distance: ${p.distance.toFixed(0)}m`,
+                        style: {
+                            backgroundColor: '#0a192f',
+                            color: '#64ffda',
+                            fontSize: '12px',
+                            padding: '8px',
+                            borderRadius: '4px',
+                            border: '1px solid #64ffda'
+                        }
+                    };
                 }
+                return {
+                    html: `<b>Edge ${p.id}</b><br/>
+                           Speed limit: ${p.speed_mph} mph<br/>
+                           Lanes: ${p.lanes}<br/>
+                           Length: ${p.length.toFixed(0)}m`,
+                    style: {
+                        backgroundColor: '#1a1a2e',
+                        color: '#fff',
+                        fontSize: '12px',
+                        padding: '8px',
+                        borderRadius: '4px'
+                    }
+                };
             }
         });
     }

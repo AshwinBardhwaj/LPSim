@@ -1,0 +1,213 @@
+<?xml version='1.0' encoding='utf-8'?>
+<graphml xmlns="http://graphml.graphdrawing.org/xmlns" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://graphml.graphdrawing.org/xmlns http://graphml.graphdrawing.org/xmlns/1.0/graphml.xsd"><key id="d16" for="edge" attr.name="geometry" attr.type="string"/>
+<key id="d15" for="edge" attr.name="length" attr.type="string"/>
+<key id="d14" for="edge" attr.name="reversed" attr.type="string"/>
+<key id="d13" for="edge" attr.name="ref" attr.type="string"/>
+<key id="d12" for="edge" attr.name="oneway" attr.type="string"/>
+<key id="d11" for="edge" attr.name="name" attr.type="string"/>
+<key id="d10" for="edge" attr.name="maxspeed" attr.type="string"/>
+<key id="d9" for="edge" attr.name="lanes" attr.type="string"/>
+<key id="d8" for="edge" attr.name="highway" attr.type="string"/>
+<key id="d7" for="edge" attr.name="osmid" attr.type="string"/>
+<key id="d6" for="node" attr.name="highway" attr.type="string"/>
+<key id="d5" for="node" attr.name="x" attr.type="string"/>
+<key id="d4" for="node" attr.name="y" attr.type="string"/>
+<key id="d3" for="graph" attr.name="simplified" attr.type="string"/>
+<key id="d2" for="graph" attr.name="crs" attr.type="string"/>
+<key id="d1" for="graph" attr.name="created_with" attr.type="string"/>
+<key id="d0" for="graph" attr.name="created_date" attr.type="string"/>
+<graph edgedefault="directed"><data key="d0">2026-10-04 00:42:44</data>
+<data key="d1">OSMnx 2.0.7</data>
+<data key="d2">epsg:4326</data>
+<data key="d3">True</data>
+<node id="243673120">
+  <data key="d4">37.8678383</data>
+  <data key="d5">-122.2916799</data>
+  <data key="d6">traffic_signals</data>
+</node>
+<node id="243673123">
+  <data key="d4">37.8681573</data>
+  <data key="d5">-122.2917823</data>
+</node>
+<node id="53055171">
+  <data key="d4">37.8704125</data>
+  <data key="d5">-122.2926409</data>
+</node>
+<node id="243673125">
+  <data key="d4">37.8690679</data>
+  <data key="d5">-122.2920773</data>
+  <data key="d6">traffic_signals</data>
+</node>
+<node id="53105539">
+  <data key="d4">37.8672479</data>
+  <data key="d5">-122.2916223</data>
+</node>
+<node id="243673129">
+  <data key="d4">37.8691565</data>
+  <data key="d5">-122.2921079</data>
+  <data key="d6">traffic_signals</data>
+</node>
+<node id="243673133">
+  <data key="d4">37.8716959</data>
+  <data key="d5">-122.2929224</data>
+  <data key="d6">traffic_signals</data>
+</node>
+<node id="243670962">
+  <data key="d4">37.870425</data>
+  <data key="d5">-122.2925057</data>
+</node>
+<node id="240448882">
+  <data key="d4">37.8690509</data>
+  <data key="d5">-122.2921955</data>
+  <data key="d6">traffic_signals</data>
+</node>
+<node id="53121268">
+  <data key="d4">37.8678134</data>
+  <data key="d5">-122.2918018</data>
+  <data key="d6">traffic_signals</data>
+</node>
+<node id="53093336">
+  <data key="d4">37.8716763</data>
+  <data key="d5">-122.2930452</data>
+  <data key="d6">traffic_signals</data>
+</node>
+<node id="53116953">
+  <data key="d4">37.869139</data>
+  <data key="d5">-122.2922214</data>
+  <data key="d6">traffic_signals</data>
+</node>
+<node id="243673117">
+  <data key="d4">37.8672692</data>
+  <data key="d5">-122.2914923</data>
+</node>
+<edge source="243673120" target="243673123" id="0">
+  <data key="d7">[781114475, 415870580]</data>
+  <data key="d8">primary</data>
+  <data key="d9">2</data>
+  <data key="d10">30 mph</data>
+  <data key="d11">San Pablo Avenue</data>
+  <data key="d12">True</data>
+  <data key="d13">CA 123</data>
+  <data key="d14">False</data>
+  <data key="d15">36.59325914851432</data>
+  <data key="d16">LINESTRING (-122.2916799 37.8678383, -122.2917019 37.8679082, -122.2917566 37.8680811, -122.2917823 37.8681573)</data>
+</edge>
+<edge source="243673123" target="243673125" id="0">
+  <data key="d7">[415870544, 781114475]</data>
+  <data key="d8">primary</data>
+  <data key="d9">['2', '3']</data>
+  <data key="d10">30 mph</data>
+  <data key="d11">San Pablo Avenue</data>
+  <data key="d12">True</data>
+  <data key="d13">CA 123</data>
+  <data key="d14">False</data>
+  <data key="d15">104.51442734834494</data>
+  <data key="d16">LINESTRING (-122.2917823 37.8681573, -122.2918059 37.8682272, -122.2919157 37.8685728, -122.2920543 37.8690003, -122.2920773 37.8690679)</data>
+</edge>
+<edge source="53055171" target="53116953" id="0">
+  <data key="d7">[203193434, 415870538]</data>
+  <data key="d8">primary</data>
+  <data key="d9">['2', '3']</data>
+  <data key="d10">30 mph</data>
+  <data key="d11">San Pablo Avenue</data>
+  <data key="d12">True</data>
+  <data key="d13">CA 123</data>
+  <data key="d14">False</data>
+  <data key="d15">146.33583867396624</data>
+  <data key="d16">LINESTRING (-122.2926409 37.8704125, -122.292622 37.8703518, -122.2926159 37.8703336, -122.2924568 37.8698487, -122.2923856 37.8696615, -122.2922442 37.8692117, -122.2922214 37.869139)</data>
+</edge>
+<edge source="243673125" target="243673129" id="0">
+  <data key="d7">203394104</data>
+  <data key="d8">primary</data>
+  <data key="d9">2</data>
+  <data key="d10">30 mph</data>
+  <data key="d11">San Pablo Avenue</data>
+  <data key="d12">True</data>
+  <data key="d13">CA 123</data>
+  <data key="d14">False</data>
+  <data key="d15">10.211485536286514</data>
+</edge>
+<edge source="243673129" target="243670962" id="0">
+  <data key="d7">[202317714, 415870548]</data>
+  <data key="d8">primary</data>
+  <data key="d9">['2', '3']</data>
+  <data key="d10">30 mph</data>
+  <data key="d11">San Pablo Avenue</data>
+  <data key="d12">True</data>
+  <data key="d13">CA 123</data>
+  <data key="d14">False</data>
+  <data key="d15">145.31434036094552</data>
+  <data key="d16">LINESTRING (-122.2921079 37.8691565, -122.2921326 37.8692274, -122.2922008 37.8694518, -122.2922153 37.8694991, -122.2922904 37.8697362, -122.2924251 37.8701772, -122.2924715 37.8703199, -122.2924854 37.8703625, -122.2925057 37.870425)</data>
+</edge>
+<edge source="243670962" target="243673133" id="0">
+  <data key="d7">[203193433, 415870556]</data>
+  <data key="d8">primary</data>
+  <data key="d9">['2', '3']</data>
+  <data key="d10">30 mph</data>
+  <data key="d11">San Pablo Avenue</data>
+  <data key="d12">True</data>
+  <data key="d13">CA 123</data>
+  <data key="d14">False</data>
+  <data key="d15">145.97773039736455</data>
+  <data key="d16">LINESTRING (-122.2925057 37.870425, -122.2925276 37.8704913, -122.2925442 37.8705369, -122.2925619 37.8705909, -122.2927631 37.871204, -122.2928007 37.8713188, -122.2928186 37.8713733, -122.2928974 37.8716141, -122.2929224 37.8716959)</data>
+</edge>
+<edge source="240448882" target="53121268" id="0">
+  <data key="d7">415870581</data>
+  <data key="d8">primary</data>
+  <data key="d9">2</data>
+  <data key="d10">30 mph</data>
+  <data key="d11">San Pablo Avenue</data>
+  <data key="d12">True</data>
+  <data key="d13">CA 123</data>
+  <data key="d14">False</data>
+  <data key="d15">141.87753244444573</data>
+  <data key="d16">LINESTRING (-122.2921955 37.8690509, -122.292174 37.868983, -122.2920879 37.8687103, -122.291959 37.8683029, -122.2919272 37.8682041, -122.2918239 37.867883, -122.2918018 37.8678134)</data>
+</edge>
+<edge source="53121268" target="53105539" id="0">
+  <data key="d7">781114474</data>
+  <data key="d8">primary</data>
+  <data key="d9">2</data>
+  <data key="d10">30 mph</data>
+  <data key="d11">San Pablo Avenue</data>
+  <data key="d12">True</data>
+  <data key="d13">CA 123</data>
+  <data key="d14">False</data>
+  <data key="d15">64.82492384711779</data>
+  <data key="d16">LINESTRING (-122.2918018 37.8678134, -122.2917845 37.8677589, -122.2916484 37.8673303, -122.2916223 37.8672479)</data>
+</edge>
+<edge source="53093336" target="53055171" id="0">
+  <data key="d7">[415870561, 415870551]</data>
+  <data key="d8">primary</data>
+  <data key="d9">['2', '3']</data>
+  <data key="d10">30 mph</data>
+  <data key="d11">San Pablo Avenue</data>
+  <data key="d12">True</data>
+  <data key="d13">CA 123</data>
+  <data key="d14">False</data>
+  <data key="d15">144.94040342498823</data>
+  <data key="d16">LINESTRING (-122.2930452 37.8716763, -122.2930194 37.8715952, -122.2927351 37.870709, -122.2926778 37.8705263, -122.2926629 37.8704805, -122.2926409 37.8704125)</data>
+</edge>
+<edge source="53116953" target="240448882" id="0">
+  <data key="d7">203394105</data>
+  <data key="d8">primary</data>
+  <data key="d9">2</data>
+  <data key="d10">30 mph</data>
+  <data key="d11">San Pablo Avenue</data>
+  <data key="d12">True</data>
+  <data key="d13">CA 123</data>
+  <data key="d14">False</data>
+  <data key="d15">10.056636719136984</data>
+</edge>
+<edge source="243673117" target="243673120" id="0">
+  <data key="d7">[415870568, 781822225]</data>
+  <data key="d8">primary</data>
+  <data key="d9">['2', '3']</data>
+  <data key="d10">30 mph</data>
+  <data key="d11">San Pablo Avenue</data>
+  <data key="d12">True</data>
+  <data key="d13">CA 123</data>
+  <data key="d14">False</data>
+  <data key="d15">65.38971770089931</data>
+  <data key="d16">LINESTRING (-122.2914923 37.8672692, -122.2915972 37.8675815, -122.2916632 37.8677851, -122.2916799 37.8678383)</data>
+</edge>
+</graph></graphml>

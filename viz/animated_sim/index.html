@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>LPSim: Animated Traffic</title>
+    <meta charset="utf-8">
+    <script src="https://unpkg.com/deck.gl@9.4.0/dist.min.js"></script>
+    <script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
+    <link href="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css" rel="stylesheet" />
+    <style>
+        body { margin: 0; padding: 0; font-family: sans-serif; background: #0a0a1e; }
+        #container { width: 100vw; height: 100vh; }
+        #panel { position: absolute; top: 16px; left: 16px; z-index: 10; background: rgba(10, 10, 30, 0.9); color: #e0e0e0; padding: 20px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); }
+        .clock { font-size: 28px; color: #fff; font-weight: 300; text-align: center; margin: 10px 0; }
+        #controls button { background: rgba(79,195,247,0.15); border: 1px solid rgba(79,195,247,0.3); color: #4fc3f7; padding: 6px 12px; cursor: pointer; border-radius: 4px; }
+        #controls button.active { background: rgba(79,195,247,0.5); color: #fff; }
+    </style>
+</head>
+<body>
+    <div id="container"></div>
+    <div id="panel">
+        <h2>Berkeley Traffic</h2>
+        <div class="clock" id="clock">05:00</div>
+        <p>Red: stopped / slow &nbsp;&bull;&nbsp; Blue: moving</p>
+        <p style="max-width:340px;font-size:12px">Lane positions are rendered to scale in physical meters. Hover a vehicle to inspect recorded state.</p>
+        <button id="pause">Pause</button>
+        <input id="seek" type="range" step="0.5" aria-label="Simulation time" style="width:240px">
+        <div id="controls">
+            <button id="btn-1x" class="active">1x</button>
+            <button id="btn-5x">5x</button>
+            <button id="btn-20x">20x</button>
+            <button id="btn-60x">60x</button>
+        </div>
+    </div>
+    <script>
+    const {DeckGL, GeoJsonLayer, TripsLayer, ScatterplotLayer} = deck;
+
+    let animationSpeed = 1;
+    let currentTime = 18000; // 5:00 AM (18000 seconds)
+    let startTime = 18000;
+    let endTime = 43200;   // 12:00 PM
+    let deckgl;
+    let networkData, tripsData = [];
+    let manifest, loadedBucket;
+
+    async function loadWindow(time) {
+        const bucket = Math.floor(time / manifest.seconds);
+        if (bucket === loadedBucket) return;
+        const file = manifest.chunks[String(bucket)];
+        let data = [];
+        if (file) {
+            const response = await fetch('../playback/' + file);
+            if (!response.ok) throw new Error('Unable to load playback window');
+            data = await response.json();
+        }
+        tripsData = data.map(trip => ({...trip,
+            positions: trip.path.map(p => [p[0], p[1]]),
+            timestamps: trip.path.map(p => p[2])}));
+        loadedBucket = bucket;
+    }
+
+    function formatTime(sec) {
+        const h = Math.floor(sec / 3600);
+        const m = Math.floor((sec % 3600) / 60);
+        return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
+    }
+
+    function setSpeed(speed) {
+        animationSpeed = speed;
+        document.querySelectorAll('#controls button').forEach(b => b.classList.remove('active'));
+        document.getElementById(`btn-${speed}x`).classList.add('active');
+    }
+
+    let paused = false;
+    let previousFrame;
+
+    function vehicleHeads() {
+        const heads = [];
+        for (const trip of tripsData) {
+            const p = trip.path;
+            if (currentTime < p[0][2] || currentTime > p[p.length - 1][2]) continue;
+            let lo = 0, hi = p.length - 1;
+            while (lo + 1 < hi) {
+                const mid = (lo + hi) >> 1;
+                if (p[mid][2] <= currentTime) lo = mid; else hi = mid;
+            }
+            const a = p[lo], b = p[hi], dt = b[2] - a[2];
+            const f = dt > 0 ? (currentTime - a[2]) / dt : 0;
+            const dx = (b[0] - a[0]) * 111320 * Math.cos(a[1] * Math.PI / 180);
+            const dy = (b[1] - a[1]) * 111320;
+            heads.push({
+                vendor: trip.vendor,
+                before: trip.samples ? trip.samples[lo] : null,
+                after: trip.samples ? trip.samples[hi] : null,
+                interval: [a[2], b[2]],
+                position: [a[0] + f * (b[0] - a[0]), a[1] + f * (b[1] - a[1])],
+                color: dt > 0 && Math.hypot(dx, dy) / dt < 2 ? [255, 100, 70] : [79, 195, 247]
+            });
+        }
+        return heads;
+    }
+
+    async function animate(frameTime) {
+        if (!paused && previousFrame !== undefined) {
+            currentTime += Math.min((frameTime - previousFrame) / 1000, 0.25) * animationSpeed;
+        }
+        previousFrame = frameTime;
+        if (currentTime > endTime) currentTime = startTime;
+
+        try {
+            if (Math.floor(currentTime / manifest.seconds) !== loadedBucket) {
+                document.getElementById('clock').innerText = 'Loading...';
+                await loadWindow(currentTime);
+                previousFrame = undefined;
+            }
+        } catch (error) {
+            document.getElementById('clock').innerText = error.message;
+            return;
+        }
+
+        document.getElementById('clock').innerText = formatTime(currentTime) + ':' + String(Math.floor(currentTime % 60)).padStart(2, '0');
+        document.getElementById('seek').value = currentTime;
+
+        deckgl.setProps({
+            layers: [
+                new GeoJsonLayer({
+                    id: 'roads',
+                    data: networkData,
+                    lineWidthUnits: 'meters',
+                    getLineColor: [66, 165, 245, 50],
+                    getLineWidth: f => Math.max(3.0, ((f.properties && f.properties.lanes) || 1) * 3.2),
+                    lineWidthMinPixels: 1,
+                    pickable: false
+                }),
+                new TripsLayer({
+                    id: 'trips',
+                    data: tripsData,
+                    getPath: d => d.positions,
+                    getTimestamps: d => d.timestamps,
+                    getColor: [79, 195, 247],
+                    opacity: 0.85,
+                    widthUnits: 'meters',
+                    getWidth: 2.2, // ~Car width footprint
+                    widthMinPixels: 2,
+                    trailLength: 3,
+                    currentTime: currentTime
+                }),
+                new ScatterplotLayer({
+                    id: 'vehicles',
+                    data: vehicleHeads(),
+                    pickable: true,
+                    radiusUnits: 'meters',
+                    getRadius: 2.2,
+                    radiusMinPixels: 2,
+                    getPosition: d => d.position,
+                    getFillColor: d => d.color
+                })
+            ]
+        });
+
+        requestAnimationFrame(animate);
+    }
+
+    async function init() {
+        document.getElementById('clock').innerText = 'Loading...';
+        const [netResp, manifestResp] = await Promise.all([
+            fetch('/api/network').then(r => r.ok ? r.json() : fetch('network.json').then(res => res.json())),
+            fetch('../playback/manifest.json', {cache: 'no-store'}).then(r => r.json())
+        ]);
+
+        networkData = netResp;
+        manifest = manifestResp;
+        startTime = manifest.start;
+        endTime = manifest.end;
+        currentTime = startTime;
+
+        await loadWindow(currentTime);
+
+        let cx = -122.27, cy = 37.87;
+        if (networkData.features && networkData.features.length > 0) {
+            const firstCoord = networkData.features[0].geometry.coordinates[0];
+            cx = firstCoord[0];
+            cy = firstCoord[1];
+        }
+
+        deckgl = new DeckGL({
+            container: 'container',
+            mapStyle: 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json',
+            initialViewState: { longitude: cx, latitude: cy, zoom: 16.5, pitch: 45, bearing: -15 },
+            controller: true,
+            getTooltip: ({object}) => object && object.vendor !== undefined ? {
+                text: `Vehicle ${object.vendor}\nRecorded before: ${JSON.stringify(object.before)}\nRecorded after: ${JSON.stringify(object.after)}\nInterval: ${object.interval.join(' ')} s`
+            } : null,
+            layers: []
+        });
+
+        const seek = document.getElementById('seek');
+        seek.min = startTime;
+        seek.max = endTime;
+        seek.value = currentTime;
+        seek.oninput = () => { currentTime = Number(seek.value); previousFrame = undefined; };
+
+        document.getElementById('pause').onclick = () => {
+            paused = !paused;
+            document.getElementById('pause').textContent = paused ? 'Play' : 'Pause';
+        };
+
+        document.getElementById('btn-1x').onclick = () => setSpeed(1);
+        document.getElementById('btn-5x').onclick = () => setSpeed(5);
+        document.getElementById('btn-20x').onclick = () => setSpeed(20);
+        document.getElementById('btn-60x').onclick = () => setSpeed(60);
+
+        requestAnimationFrame(animate);
+    }
+
+    init().catch(error => { document.getElementById('clock').textContent = error.message; });
+    </script>
+</body>
+</html>

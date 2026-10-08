@@ -74,6 +74,8 @@ struct B18TrafficVehicle {
   unsigned short LC_endOKLanes;
   unsigned short LC_stateofLaneChanging;
 
+  unsigned short LC_attempted = 0, LC_gapRejected = 0; // per-step diagnostics
+
   int isInIntersection;
   bool operator==(const B18TrafficVehicle& other) const {
         return id == other.id &&
