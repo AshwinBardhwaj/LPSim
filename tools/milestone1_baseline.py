@@ -41,6 +41,7 @@ def prepare():
  dump(ART/'prepared.json',dict(cases=cases,seed=42,seed_note='Existing seeded San Pablo routes/departures reused verbatim; simulation has no random draws. Corridor lanes assigned deterministically by departure order.',dt=.25,horizon=600,profile_times=[60,180,450],repeats=3))
  print(ART)
 def freeze():
+ assert not (ART/'manifest.json').exists(), 'Frozen manifest already exists'
  cfg=json.loads((ART/'prepared.json').read_text());shutil.copy2(ROOT/'build/lpsim',ART/'lpsim')
  cfg.update(commit=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),binary_sha256=sha(ART/'lpsim'),source_sha256=sha(ROOT/'src/simulator/junction_simulator.cu'),exclusive=0,threads_per_block=128,serial_junction_launch=[1,1],parallel_kernels=['advance','prepareJunctions','summarizeJunctions','requestJunctionEntry','arbitrateJunctions','spawnJunctionVehicles'])
  cfg['environment']={}
@@ -48,7 +49,7 @@ def freeze():
   r=subprocess.run(cmd,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT);cfg['environment'][name]=r.stdout
  dump(ART/'manifest.json',cfg)
 def run():
- cfg=json.loads((ART/'manifest.json').read_text());results=[]
+ cfg=json.loads((ART/'manifest.json').read_text());assert sha(ART/'lpsim')==cfg['binary_sha256'];results=[]
  for repeat in range(3):
   for case in cfg['cases'][::1 if repeat%2==0 else -1]:
    for parallel in (1,0):
@@ -70,7 +71,7 @@ def run():
     if folder!=reference:
      for name in hashes:(folder/name).unlink()
 def profile():
- cfg=json.loads((ART/'manifest.json').read_text())
+ cfg=json.loads((ART/'manifest.json').read_text());assert sha(ART/'lpsim')==cfg['binary_sha256']
  for case in cfg['cases']:
   for t in cfg['profile_times']:
    folder=ART/'profiles'/case['name']/str(t);folder.mkdir(parents=True,exist_ok=True)
