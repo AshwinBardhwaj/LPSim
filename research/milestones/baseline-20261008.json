@@ -1,0 +1,101 @@
+{
+  "id": "baseline-20261008",
+  "title": "Milestone 1: paired baseline and action-linked GPU counters",
+  "status": "validated-recorded-cases",
+  "path": "milestones/baseline-20261008",
+  "original_locations": [
+    "artifacts/current/milestone1-baseline-20261008",
+    "reports/milestone1-baseline-20261008"
+  ],
+  "simulation_commit": "1082079",
+  "preservation_commit": "31b69cbbcf5a973de444ab7c8d234f053b99482a",
+  "validation": {
+    "passed": true,
+    "full_runs": 54,
+    "profile_windows": 27,
+    "profile_reference_prefix_equivalence": true,
+    "serial_and_repeat_byte_equivalence": true,
+    "population_conservation": true,
+    "movement_and_gap_checks": true,
+    "cases": [
+      {
+        "case": "controller72_20",
+        "regime": "Low-demand signal stopping",
+        "maximum_due_backlog_after_spawn": 1,
+        "completed": 20,
+        "space_denials": 19,
+        "conflict_or_yield_denials": 0
+      },
+      {
+        "case": "always_permitted_20",
+        "regime": "Low-demand unsignalized movement",
+        "maximum_due_backlog_after_spawn": 1,
+        "completed": 20,
+        "space_denials": 0,
+        "conflict_or_yield_denials": 5
+      },
+      {
+        "case": "corridor_20",
+        "regime": "Synthetic free-flow capacity control (startup acceleration retained)",
+        "maximum_due_backlog_after_spawn": 0,
+        "completed": 20,
+        "space_denials": 0,
+        "conflict_or_yield_denials": 0
+      },
+      {
+        "case": "controller72_400",
+        "regime": "Signal-controlled congestion with pending backlog",
+        "maximum_due_backlog_after_spawn": 180,
+        "completed": 139,
+        "space_denials": 7096,
+        "conflict_or_yield_denials": 626
+      },
+      {
+        "case": "always_permitted_400",
+        "regime": "Always-permitted, congested; not free-flow",
+        "maximum_due_backlog_after_spawn": 118,
+        "completed": 377,
+        "space_denials": 7530,
+        "conflict_or_yield_denials": 8776
+      },
+      {
+        "case": "corridor_400",
+        "regime": "Synthetic free-flow capacity control (startup acceleration retained)",
+        "maximum_due_backlog_after_spawn": 0,
+        "completed": 400,
+        "space_denials": 0,
+        "conflict_or_yield_denials": 0
+      },
+      {
+        "case": "controller72_1600",
+        "regime": "Signal-controlled congestion with pending backlog",
+        "maximum_due_backlog_after_spawn": 1328,
+        "completed": 137,
+        "space_denials": 9976,
+        "conflict_or_yield_denials": 878
+      },
+      {
+        "case": "always_permitted_1600",
+        "regime": "Always-permitted, congested; not free-flow",
+        "maximum_due_backlog_after_spawn": 1252,
+        "completed": 441,
+        "space_denials": 22492,
+        "conflict_or_yield_denials": 10786
+      },
+      {
+        "case": "corridor_1600",
+        "regime": "Synthetic free-flow capacity control (startup acceleration retained)",
+        "maximum_due_backlog_after_spawn": 0,
+        "completed": 1600,
+        "space_denials": 0,
+        "conflict_or_yield_denials": 0
+      }
+    ]
+  },
+  "reports": [
+    "milestones/baseline-20261008/reports/milestone1-baseline-20261008/milestone1-baseline.pdf"
+  ],
+  "viewers": [],
+  "report_url": "http://100.85.134.52:8093/milestone1/",
+  "files": 805
+}
