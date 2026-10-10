@@ -74,14 +74,25 @@ def run():
    print(case['name'],repeat,flush=True)
  dump(ART/'runs-complete.json',dict(passed=True))
 def profile():
- extra=['smsp__inst_executed.sum','l1tex__t_sectors_pipe_lsu_mem_global_op_ld.sum','lts__t_sectors_op_read.sum','launch__registers_per_thread','launch__local_mem_per_thread','l1tex__t_sectors_pipe_lsu_mem_local_op_ld.sum','l1tex__t_sectors_pipe_lsu_mem_local_op_st.sum']
+ extra=['smsp__inst_executed.sum','smsp__thread_inst_executed.sum','l1tex__t_sectors_pipe_lsu_mem_global_op_ld.sum','lts__t_sectors_op_read.sum','launch__registers_per_thread','launch__local_mem_per_thread','l1tex__t_sectors_pipe_lsu_mem_local_op_ld.sum','l1tex__t_sectors_pipe_lsu_mem_local_op_st.sum']
  cfg=json.loads((ART/'manifest.json').read_text())
  for case in cfg['cases']:
   folder=ART/'profiles'/case['name'];folder.mkdir(parents=True,exist_ok=True)
-  cmd=['sudo','-n','/usr/local/cuda/bin/ncu','--metrics',','.join(METRICS+extra),'--launch-skip','3','--launch-count','1','--force-overwrite','--export',str(folder/'kernel'),str(ART/'benchmark'),str(ART/'model.txt'),str(ART/'snapshots'/f"{case['name']}.txt"),str(folder/'output.csv'),'1']
+  cmd=['sudo','-n','/usr/local/cuda/bin/ncu','--metrics',','.join(METRICS+extra),'--cache-control','none','--clock-control','none','--launch-skip','3','--launch-count','1','--force-overwrite','--export',str(folder/'kernel'),str(ART/'benchmark'),str(ART/'model.txt'),str(ART/'snapshots'/f"{case['name']}.txt"),str(folder/'output.csv'),'1']
   dump(folder/'command.json',cmd)
   with (folder/'ncu.log').open('w') as log:subprocess.run(cmd,stdout=log,stderr=log,check=True)
   with (folder/'metrics.csv').open('w') as out:subprocess.run(['sudo','-n','/usr/local/cuda/bin/ncu','--import',str(folder/'kernel.ncu-rep'),'--page','raw','--csv'],stdout=out,check=True)
   assert sha(folder/'output.csv')==sha(ART/'runs'/case['name']/'0.csv');print('profile',case['name'],flush=True)
+def source():
+ for name in ('motion_50','padding_pending_8192'):
+  folder=ART/'source_profiles'/name;folder.mkdir(parents=True,exist_ok=True)
+  cmd=['sudo','-n','/usr/local/cuda/bin/ncu','--section','SourceCounters','--import-source','yes','--cache-control','none','--clock-control','none','--launch-skip','3','--launch-count','1','--force-overwrite','--export',str(folder/'source'),str(ART/'benchmark'),str(ART/'model.txt'),str(ART/'snapshots'/f'{name}.txt'),str(folder/'output.csv'),'1']
+  dump(folder/'command.json',cmd)
+  with (folder/'ncu.log').open('w') as log:subprocess.run(cmd,stdout=log,stderr=log,check=True)
+  for page in ('source','raw'):
+   command=['sudo','-n','/usr/local/cuda/bin/ncu','--import',str(folder/'source.ncu-rep'),'--page',page,'--csv']
+   if page=='source':command+=['--print-source','cuda,sass']
+   with (folder/(page+'.csv')).open('w') as f:subprocess.run(command,stdout=f,check=True)
+  assert sha(folder/'output.csv')==sha(ART/'runs'/name/'0.csv');print('source',name,flush=True)
 if __name__=='__main__':
- p=argparse.ArgumentParser();p.add_argument('action',choices=['prepare','build','run','profile']);a=p.parse_args();globals()[a.action]()
+ p=argparse.ArgumentParser();p.add_argument('action',choices=['prepare','build','run','profile','source']);a=p.parse_args();globals()[a.action]()
