@@ -1,6 +1,6 @@
 {
   "archive_location": "../research-archive",
-  "inventory_sha256": "809b185a44a019469f62b97c3d65f9806c3b54642922182d50e4432935e72193",
+  "inventory_sha256": "5f39e0f683e49783b8421a78d64bbf8e40f125e55e0b0ef833a7240eff2d962f",
   "milestones": [
     {
       "id": "berkeley-baseline",
@@ -472,6 +472,135 @@
       "viewers": [],
       "report_url": "http://100.85.134.52:8093/milestone1/",
       "files": 805
+    },
+    {
+      "id": "snapshots-20261009",
+      "title": "Milestone 2A: controlled Berkeley road snapshots",
+      "status": "validated-recorded-cases",
+      "path": "milestones/snapshots-20261009",
+      "original_locations": [
+        "artifacts/current/milestone2-snapshots-20261009",
+        "reports/milestone2-snapshots-20261009"
+      ],
+      "simulation_commit": "31fa33d",
+      "preservation_commit": "8c0cc08cf7eec746c83d400218f2915adca2a118",
+      "validation": {
+        "passed": true,
+        "cases": [
+          {
+            "case": "motion_0",
+            "spacing_passed": true,
+            "repeat_and_profile_identical": true,
+            "search_counts_verified": true,
+            "active_physical_equivalence": false
+          },
+          {
+            "case": "motion_50",
+            "spacing_passed": true,
+            "repeat_and_profile_identical": true,
+            "search_counts_verified": true,
+            "active_physical_equivalence": false
+          },
+          {
+            "case": "motion_90",
+            "spacing_passed": true,
+            "repeat_and_profile_identical": true,
+            "search_counts_verified": true,
+            "active_physical_equivalence": false
+          },
+          {
+            "case": "motion_100",
+            "spacing_passed": true,
+            "repeat_and_profile_identical": true,
+            "search_counts_verified": true,
+            "active_physical_equivalence": false
+          },
+          {
+            "case": "population_256",
+            "spacing_passed": true,
+            "repeat_and_profile_identical": true,
+            "search_counts_verified": true,
+            "active_physical_equivalence": false
+          },
+          {
+            "case": "population_512",
+            "spacing_passed": true,
+            "repeat_and_profile_identical": true,
+            "search_counts_verified": true,
+            "active_physical_equivalence": false
+          },
+          {
+            "case": "population_1024",
+            "spacing_passed": true,
+            "repeat_and_profile_identical": true,
+            "search_counts_verified": true,
+            "active_physical_equivalence": false
+          },
+          {
+            "case": "padding_pending_4096",
+            "spacing_passed": true,
+            "repeat_and_profile_identical": true,
+            "search_counts_verified": true,
+            "active_physical_equivalence": true
+          },
+          {
+            "case": "padding_pending_8192",
+            "spacing_passed": true,
+            "repeat_and_profile_identical": true,
+            "search_counts_verified": true,
+            "active_physical_equivalence": true
+          },
+          {
+            "case": "padding_completed_4096",
+            "spacing_passed": true,
+            "repeat_and_profile_identical": true,
+            "search_counts_verified": true,
+            "active_physical_equivalence": true
+          },
+          {
+            "case": "padding_completed_8192",
+            "spacing_passed": true,
+            "repeat_and_profile_identical": true,
+            "search_counts_verified": true,
+            "active_physical_equivalence": true
+          },
+          {
+            "case": "order_shuffle",
+            "spacing_passed": true,
+            "repeat_and_profile_identical": true,
+            "search_counts_verified": true,
+            "active_physical_equivalence": true
+          },
+          {
+            "case": "order_lane",
+            "spacing_passed": true,
+            "repeat_and_profile_identical": true,
+            "search_counts_verified": true,
+            "active_physical_equivalence": true
+          },
+          {
+            "case": "order_interleave",
+            "spacing_passed": true,
+            "repeat_and_profile_identical": true,
+            "search_counts_verified": true,
+            "active_physical_equivalence": true
+          },
+          {
+            "case": "order_state",
+            "spacing_passed": true,
+            "repeat_and_profile_identical": true,
+            "search_counts_verified": true,
+            "active_physical_equivalence": true
+          }
+        ],
+        "scope": "Road kernel only; no intersection requests executed; stable IDs used to compare physical output after storage permutation."
+      },
+      "reports": [
+        "milestones/snapshots-20261009/reports/milestone2-snapshots-20261009/milestone2-snapshots.pdf"
+      ],
+      "viewers": [],
+      "report_url": "http://100.85.134.52:8093/milestone2/",
+      "files": 539
     }
   ]
 }
