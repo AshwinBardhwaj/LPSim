@@ -1,0 +1,4 @@
+{
+  "source": "data/networks/berkeley",
+  "scope": "Road table copied numerically; one connected outgoing edge per eligible road; lane 0 synthetic snapshot fixtures, not calibrated intersection geometry."
+}
