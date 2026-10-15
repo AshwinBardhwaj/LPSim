@@ -1,0 +1,15 @@
+{
+  "id": "berkeley-state-study-20261014",
+  "title": "Full Berkeley intersections and vehicle-state cost study",
+  "status": "validated-recorded-cases; static-prior-generalization-not-established",
+  "path": "milestones/berkeley-state-study-20261014",
+  "original_locations": [
+    "artifacts/current/berkeley-state-study-20261014",
+    "reports/berkeley-state-study-20261014"
+  ],
+  "reports": [
+    "milestones/berkeley-state-study-20261014/reports/berkeley-state-study-20261014/berkeley-state-study.pdf"
+  ],
+  "files": 2796,
+  "report_url": "http://100.85.134.52:8093/berkeley-study/"
+}

@@ -1,0 +1,24 @@
+{
+  "source": "data/networks/berkeley",
+  "input_hashes": {
+    "nodes.csv": "75d6a176af83bbe80a4dda7fc10c1c6a25091d8e19ec8e7ccc3492de1d438c78",
+    "edges.csv": "d79a23c7b7b9ea5247f8394ac68c15e5f723e3613fcd9eddc862150f16fb09f4",
+    "od_demand.csv": "ba644f69073c9bb29c80a14bba4826e31617518f7af14e5dfb3c2115f7656230"
+  },
+  "roads": 5013,
+  "movements": 12216,
+  "junctions": 1672,
+  "conflict_entries": 100734,
+  "route_pool": 2048,
+  "rejected_od_pairs": 1239,
+  "assumptions": [
+    "Research network, not field calibrated",
+    "Nodes joined along <25 m edges; within-group edges removed",
+    "Endpoint chords approximate geometry because cached CSV lacks road polylines",
+    "Road lengths retain OSM values minus 16 m; connectors cubic, minimum length 8 m",
+    "Preserve up to 8 lanes; no lane changes within routes",
+    "No U-turns; inferred turn classification and lane permissions, not OSM turn restrictions",
+    "72 s synthetic signal controller at every modeled junction; right-on-red assumed permitted; no pedestrians",
+    "OD pairs retained from file; departures resampled for controlled demand; trips limited to 32 roads"
+  ]
+}
