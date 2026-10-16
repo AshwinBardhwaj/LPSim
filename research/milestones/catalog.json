@@ -632,6 +632,22 @@
       ],
       "files": 5526,
       "report_url": "http://100.85.134.52:8093/berkeley-optimized-state/"
+    },
+    {
+      "id": "berkeley-junction-index-20261016",
+      "title": "Priority-preserving junction request indexing and local-work measurements",
+      "status": "validated-recorded-cases; allocator-gate-not-established",
+      "path": "milestones/berkeley-junction-index-20261016",
+      "original_locations": [
+        "artifacts/current/berkeley-junction-index-20261016",
+        "reports/berkeley-junction-index-20261016"
+      ],
+      "simulation_commit": "c3fdb91",
+      "reports": [
+        "milestones/berkeley-junction-index-20261016/reports/berkeley-junction-index-20261016/junction-index.pdf"
+      ],
+      "files": 1068,
+      "report_url": "http://100.85.134.52:8093/berkeley-junction-index/"
     }
   ]
 }
