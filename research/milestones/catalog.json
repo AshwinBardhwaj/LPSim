@@ -616,6 +616,22 @@
       ],
       "files": 2796,
       "report_url": "http://100.85.134.52:8093/berkeley-study/"
+    },
+    {
+      "id": "berkeley-optimized-state-20261016",
+      "title": "Optimized Berkeley matched states and complete-step GPU profiles",
+      "status": "validated-recorded-cases; allocator-gate-not-established",
+      "path": "milestones/berkeley-optimized-state-20261016",
+      "original_locations": [
+        "artifacts/current/berkeley-optimized-state-20261016",
+        "reports/berkeley-optimized-state-20261016"
+      ],
+      "simulation_commit": "4ab1d4e",
+      "reports": [
+        "milestones/berkeley-optimized-state-20261016/reports/berkeley-optimized-state-20261016/optimized-state-study.pdf"
+      ],
+      "files": 5526,
+      "report_url": "http://100.85.134.52:8093/berkeley-optimized-state/"
     }
   ]
 }
