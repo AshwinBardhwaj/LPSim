@@ -147,25 +147,37 @@ __global__ void requestJunctionEntry(const Car* cars,int n,const Road* roads,con
  }
  requests[i]=r;
 }
-// One arbiter per junction, with independent junctions executing concurrently.
-// Vehicle-ID priority and green-before-red ordering match the serial reference.
+// Shared admission logic: preserve reservation checks, conflict order and priority.
+__device__ void admitJunctionRequest(Car* cars,int i,int pass,const Road* roads,const Movement* moves,
+ const int* conflict,int nm,bool exclusive,JunctionSummary* s,const EntryRequest& r,int* granted,int& count){
+  Car& c=cars[i];if(c.state!=1)return;const Movement m=moves[r.mid];int key=m.out*8+m.outLane;
+  if(s->reserved[key]&&(exclusive||s->owner[key]!=r.mid)){c.denial=1;return;}
+  float speed=m.turn==0?7.f:4.f;
+  if(!exclusive&&s->tail[r.mid]<fmaxf(SPACING,2.f*speed)){c.denial=1;return;}
+  if(fminf(s->nearest[key],roads[m.out].length)<SPACING*(s->reserved[key]+1)+8.f){c.denial=2;return;}
+  int blocked=r.blockedIndex,reason=r.blockedReason;
+  for(int k=0;k<count;++k){int j=granted[k];if(j<=blocked&&conflictsWith(conflict,nm,r.mid,j)&&(exclusive||j!=r.mid)){blocked=j;reason=1;}}
+  if(blocked<nm){c.denial=reason;return;}
+  c.entryWait=c.stopped;c.state=2;c.mid=r.mid;c.pos=0;c.v=speed;c.event=pass==1?2:1;c.stopped=0;
+  s->tail[r.mid]=0;s->reserved[key]++;s->owner[key]=r.mid;granted[count++]=r.mid;
+}
+// Reference: full request scan, retained for exact comparisons.
 __global__ void arbitrateJunctions(Car* cars,int n,const Road* roads,const Movement* moves,const int* conflict,int nm,int nj,bool exclusive,JunctionSummary* s,const EntryRequest* requests){
  int junction=blockIdx.x*blockDim.x+threadIdx.x;if(junction>=nj)return;
- // Only newly granted movements need testing; existing conflicts were evaluated
- // by the requesting vehicle's thread. Local IDs are bounded by movement count.
  int* granted=s->granted+s->junctionOffsets[junction];int count=0;
  for(int pass=0;pass<2;++pass)for(int i=0;i<n;++i){
   const EntryRequest r=requests[i];if(r.pass!=pass||moves[r.mid].junction!=junction)continue;
-  Car& c=cars[i];if(c.state!=1)continue;const Movement m=moves[r.mid];int key=m.out*8+m.outLane;
-  if(s->reserved[key]&&(exclusive||s->owner[key]!=r.mid)){c.denial=1;continue;}
-  float speed=m.turn==0?7.f:4.f;
-  if(!exclusive&&s->tail[r.mid]<fmaxf(SPACING,2.f*speed)){c.denial=1;continue;}
-  if(fminf(s->nearest[key],roads[m.out].length)<SPACING*(s->reserved[key]+1)+8.f){c.denial=2;continue;}
-  int blocked=r.blockedIndex,reason=r.blockedReason;
-  for(int k=0;k<count;++k){int j=granted[k];if(j<=blocked&&conflictsWith(conflict,nm,r.mid,j)&&(exclusive||j!=r.mid)){blocked=j;reason=1;}}
-  if(blocked<nm){c.denial=reason;continue;}
-  c.entryWait=c.stopped;c.state=2;c.mid=r.mid;c.pos=0;c.v=speed;c.event=pass==1?2:1;c.stopped=0;
-  s->tail[r.mid]=0;s->reserved[key]++;s->owner[key]=r.mid;granted[count++]=r.mid;
+  admitJunctionRequest(cars,i,pass,roads,moves,conflict,nm,exclusive,s,r,granted,count);
+ }
+}
+// Keys sorted by (junction, green-before-red pass, stable vehicle ID).
+// Optional junction list supports truly local diagnostic launches without copying cars.
+__global__ void arbitrateIndexedJunctions(Car* cars,int n,const Road* roads,const Movement* moves,const int* conflict,int nm,int nj,bool exclusive,JunctionSummary* s,const EntryRequest* requests,const unsigned long long* keys,const int* begin,const int* end,const int* junctionIds=nullptr,int selectedCount=0){
+ int slot=blockIdx.x*blockDim.x+threadIdx.x;if(slot>=(junctionIds?selectedCount:nj))return;
+ int junction=junctionIds?junctionIds[slot]:slot;
+ int* granted=s->granted+s->junctionOffsets[junction];int count=0;
+ for(int k=begin[junction];k<end[junction];++k){int i=static_cast<unsigned int>(keys[k]);const EntryRequest r=requests[i];
+  admitJunctionRequest(cars,i,r.pass,roads,moves,conflict,nm,exclusive,s,r,granted,count);
  }
 }
 // One writer per receiving lane. Winner IDs came from the immutable pending set;
@@ -177,6 +189,7 @@ __global__ void spawnJunctionVehicles(Car* cars,int n,int nr,const JunctionSumma
 
 }
 #include "../../tools/leader_index.cuh"
+#include "../../tools/junction_request_index.cuh"
 void runScalableJunctionSimulation(const char* scenario){
  bool parallel=!(std::getenv("LPSIM_JUNCTION_PARALLEL")&&std::string(std::getenv("LPSIM_JUNCTION_PARALLEL"))=="0");
  bool exclusive=std::getenv("LPSIM_JUNCTION_EXCLUSIVE")&&std::string(std::getenv("LPSIM_JUNCTION_EXCLUSIVE"))=="1";
@@ -210,6 +223,7 @@ void runScalableJunctionSimulation(const char* scenario){
  std::vector<int> offsets(nj+1);for(auto m:moves)offsets[m.junction+1]++;for(int j=0;j<nj;++j)offsets[j+1]+=offsets[j];summary.junctionOffsets=device(offsets);
  auto* ds=device(std::vector<JunctionSummary>{summary});EntryRequest* dq;check(cudaMalloc(&dq,n*sizeof(EntryRequest)));
  MotionContext motionContext(nr,nm,n);
+ JunctionRequestIndex requestIndex(n,nj);
  bool indexed=std::getenv("LPSIM_LEADER_INDEX")&&std::string(std::getenv("LPSIM_LEADER_INDEX"))=="1";int *orderDevice=nullptr,*leaders=nullptr;if(indexed){check(cudaMalloc(&orderDevice,n*sizeof(int)));check(cudaMalloc(&leaders,n*sizeof(int)));}
  int trajectoryStride=std::getenv("LPSIM_TRAJECTORY_STRIDE")?std::max(1,atoi(std::getenv("LPSIM_TRAJECTORY_STRIDE"))):2;
  std::ofstream traj("states.csv"),events("events.csv"),signals("signals.csv"),series("timeseries.csv");
@@ -231,7 +245,9 @@ void runScalableJunctionSimulation(const char* scenario){
    prepareJunctions<<<(std::max(n,summary.capacity)+127)/128,128>>>(b,n,dm,dt,ds);check(cudaGetLastError());
    summarizeJunctions<<<(n+127)/128,128>>>(b,n,dr,dm,t,mode,ds);check(cudaGetLastError());
    requestJunctionEntry<<<(n+127)/128,128>>>(b,n,dr,dm,dc,nm,t,mode,exclusive,ds,dq);check(cudaGetLastError());
-   arbitrateJunctions<<<(nj+127)/128,128>>>(b,n,dr,dm,dc,nm,nj,exclusive,ds,dq);check(cudaGetLastError());
+   if(requestIndex.enabled){requestIndex.build(dq,dm);
+    arbitrateIndexedJunctions<<<(nj+127)/128,128>>>(b,n,dr,dm,dc,nm,nj,exclusive,ds,dq,requestIndex.keys,requestIndex.begin,requestIndex.end);
+   }else arbitrateJunctions<<<(nj+127)/128,128>>>(b,n,dr,dm,dc,nm,nj,exclusive,ds,dq);check(cudaGetLastError());
    spawnJunctionVehicles<<<(nr*8+127)/128,128>>>(b,n,nr,ds);check(cudaGetLastError());
   }else{junctionStep<<<1,1>>>(b,n,dr,dm,dc,nm,t,dt,mode,exclusive);check(cudaGetLastError());}check(cudaEventRecord(ev2));check(cudaEventSynchronize(ev2));calc+=std::chrono::duration<double>(std::chrono::steady_clock::now()-start).count();float am,jm;check(cudaEventElapsedTime(&am,ev0,ev1));check(cudaEventElapsedTime(&jm,ev1,ev2));advanceMs+=am;junctionMs+=jm;std::swap(a,b);check(cudaMemcpy(cars.data(),a,n*sizeof(Car),cudaMemcpyDeviceToHost));
   int active=0,stopped=0,inside=0,completed=0,pending=0;
