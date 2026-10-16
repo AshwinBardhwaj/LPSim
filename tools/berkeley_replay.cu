@@ -39,12 +39,13 @@ int main(int argc,char** argv){try{
 #ifdef STUDY_INSTRUMENT
  unsigned long long* counts;check(cudaMalloc(&counts,n*3*sizeof(unsigned long long)));check(cudaMemset(counts,0,n*3*sizeof(unsigned long long)));check(cudaMemcpyToSymbol(studyCounts,&counts,sizeof(counts)));
 #endif
+ MotionContext motionContext(nr,nm,n);
  int *order,*leaders;check(cudaMalloc(&order,n*sizeof(int)));check(cudaMalloc(&leaders,n*sizeof(int)));
  auto build=[&](){initializeLaneOrder<<<(n+block-1)/block,block>>>(order,n);thrust::sort(thrust::device_pointer_cast(order),thrust::device_pointer_cast(order)+n,LanePositionLess{a});linkLaneLeaders<<<(n+block-1)/block,block>>>(a,order,leaders,n);};
  build();advance<<<(n+block-1)/block,block>>>(a,b,n,dr,dm,dc,nm,t,.25,mode,false,leaders);check(cudaGetLastError());
  std::vector<Car> expected(n);check(cudaMemcpy(expected.data(),b,n*sizeof(Car),cudaMemcpyDeviceToHost));
  cudaEvent_t start,middle,end;check(cudaEventCreate(&start));check(cudaEventCreate(&middle));check(cudaEventCreate(&end));std::vector<float> totalTimes,motionTimes;
- for(int repeat=0;repeat<13;++repeat){check(cudaEventRecord(start));build();check(cudaEventRecord(middle));advance<<<(n+block-1)/block,block>>>(a,b,n,dr,dm,dc,nm,t,.25,mode,false,leaders,selector<0?nullptr:mask,0);check(cudaGetLastError());check(cudaEventRecord(end));check(cudaEventSynchronize(end));float total,motion;check(cudaEventElapsedTime(&total,start,end));check(cudaEventElapsedTime(&motion,middle,end));if(repeat>=3){totalTimes.push_back(total);motionTimes.push_back(motion);}}
+ for(int repeat=0;repeat<13;++repeat){check(cudaEventRecord(start));build();motionContext.build(a,dm,dc,t,mode,false);check(cudaEventRecord(middle));advance<<<(n+block-1)/block,block>>>(a,b,n,dr,dm,dc,nm,t,.25,mode,false,leaders,selector<0?nullptr:mask,0,motionContext.head,motionContext.links,motionContext.available);check(cudaGetLastError());check(cudaEventRecord(end));check(cudaEventSynchronize(end));float total,motion;check(cudaEventElapsedTime(&total,start,end));check(cudaEventElapsedTime(&motion,middle,end));if(repeat>=3){totalTimes.push_back(total);motionTimes.push_back(motion);}}
  std::vector<Car> output(n);check(cudaMemcpy(output.data(),b,n*sizeof(Car),cudaMemcpyDeviceToHost));
 #ifdef STUDY_INSTRUMENT
  std::vector<unsigned long long> observed(n*3);std::vector<int> hostLeaders(n);check(cudaMemcpy(hostLeaders.data(),leaders,n*sizeof(int),cudaMemcpyDeviceToHost));check(cudaMemcpy(observed.data(),counts,n*3*sizeof(unsigned long long),cudaMemcpyDeviceToHost));std::ofstream counters(std::string(argv[4])+".counts.csv");counters<<"id,region,state,speed,distance_to_stop,leader,receiving_candidates,connector_candidates,thread_cycles\n";

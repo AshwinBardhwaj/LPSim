@@ -36,20 +36,26 @@ __host__ __device__ int indication(const Movement& m,float t,int mode){
  return 0;
 }
 __host__ __device__ bool clearance(float t,int mode){if(mode)return false;float p=fmodf(t,36.f);return (p>=23&&p<24)||p>=35;}
+#include "../../tools/motion_context.cuh"
 __global__ void advance(const Car* old,Car* next,int n,const Road* roads,
-                        const Movement* moves,const int* conflict,int nm,float t,float dt,int mode,bool exclusive,const int* leaders=nullptr,const int* work=nullptr,int region=-1){
+                        const Movement* moves,const int* conflict,int nm,float t,float dt,int mode,bool exclusive,const int* leaders=nullptr,const int* work=nullptr,int region=-1,const int* connectorHead=nullptr,const int* connectorNext=nullptr,const int* movementOpen=nullptr){
  int i=blockIdx.x*blockDim.x+threadIdx.x;if(i>=n)return;if(work&&work[i]!=region){next[i]=old[i];return;}Car c=old[i];c.event=0;c.denial=0;
  if(c.state==1){const int edge=c.edges[c.k],lane=c.lanes[c.k];const Road r=roads[edge];
   bool open=c.k==c.n-1;
   if(c.k+1<c.n){int mid=c.moves[c.k];const Movement m=moves[mid];open=indication(m,t,mode)==2;
-   if(open)for(int j=0;j<n;++j){const Car& d=old[j];
+   if(movementOpen)open=movementOpen[mid];
+   else if(open)for(int j=0;j<n;++j){const Car& d=old[j];
     if((d.state==2&&conflictsWith(conflict,nm,mid,d.mid)&&(exclusive||mid!=d.mid))||
        (d.state==1&&d.edges[d.k]==m.out&&d.lanes[d.k]==m.outLane&&d.pos<SPACING+8.f)){open=false;break;}}
   }
   float gap=open?1.e6f:r.length-c.pos+2,leaderV=0,bound=r.length;
   if(leaders){if(leaders[i]>=0){const Car& d=old[leaders[i]];float g=d.pos-c.pos-4.5f;if(g<gap){gap=g;leaderV=d.v;}bound=fminf(bound,d.pos-SPACING);}}else for(int j=0;j<n;++j){if(j==i)continue;const Car& d=old[j];if(d.state==1&&d.edges[d.k]==edge&&d.lanes[d.k]==lane&&d.pos>c.pos){float g=d.pos-c.pos-4.5f;if(g<gap){gap=g;leaderV=d.v;}bound=fminf(bound,d.pos-SPACING);}}
-  for(int j=0;j<n;++j){const Car& d=old[j];if(d.state==2&&moves[d.mid].in==edge&&moves[d.mid].inLane==lane){
-   float distance=r.length-c.pos+d.pos;if(distance-4.5f<gap){gap=distance-4.5f;leaderV=d.v;}bound=fminf(bound,r.length+d.pos-SPACING);
+  int chosenConnector=-1;
+  for(int j=connectorHead?connectorHead[edge*8+lane]:0;j>=0&&j<n;j=connectorHead?connectorNext[j]:j+1){const Car& d=old[j];if(d.state==2&&moves[d.mid].in==edge&&moves[d.mid].inLane==lane){
+   float distance=r.length-c.pos+d.pos;float g=distance-4.5f;
+   // Preserve the original ascending-ID tie choice despite atomic list order.
+   if(g<gap||(g==gap&&chosenConnector>=0&&j<chosenConnector)){gap=g;leaderV=d.v;chosenConnector=j;}
+   bound=fminf(bound,r.length+d.pos-SPACING);
   }}
   float desired=1.38075f+fmaxf(0.f,c.v*.5433028f+c.v*(c.v-leaderV)/(2*sqrtf(.5570409f*2.902058f)));
   float acc=.5570409f*(1-powf(c.v/r.speed,4)-powf(desired/fmaxf(.05f,gap),2));
@@ -203,6 +209,7 @@ void runScalableJunctionSimulation(const char* scenario){
  summary.busy=device(std::vector<int>(summary.capacity));summary.reserved=device(std::vector<int>(summary.capacity));summary.owner=device(std::vector<int>(summary.capacity));summary.spawn=device(std::vector<int>(summary.capacity));summary.granted=device(std::vector<int>(nm));
  std::vector<int> offsets(nj+1);for(auto m:moves)offsets[m.junction+1]++;for(int j=0;j<nj;++j)offsets[j+1]+=offsets[j];summary.junctionOffsets=device(offsets);
  auto* ds=device(std::vector<JunctionSummary>{summary});EntryRequest* dq;check(cudaMalloc(&dq,n*sizeof(EntryRequest)));
+ MotionContext motionContext(nr,nm,n);
  bool indexed=std::getenv("LPSIM_LEADER_INDEX")&&std::string(std::getenv("LPSIM_LEADER_INDEX"))=="1";int *orderDevice=nullptr,*leaders=nullptr;if(indexed){check(cudaMalloc(&orderDevice,n*sizeof(int)));check(cudaMalloc(&leaders,n*sizeof(int)));}
  int trajectoryStride=std::getenv("LPSIM_TRAJECTORY_STRIDE")?std::max(1,atoi(std::getenv("LPSIM_TRAJECTORY_STRIDE"))):2;
  std::ofstream traj("states.csv"),events("events.csv"),signals("signals.csv"),series("timeseries.csv");
@@ -219,7 +226,8 @@ void runScalableJunctionSimulation(const char* scenario){
   for(const auto& c:cars){prePending+=c.state==0;preFuture+=c.state==0&&c.departure>t;preStopped+=c.state==1&&c.v<.5f;preMoving+=c.state==1&&c.v>=.5f;preConnector+=c.state==2;preCompleted+=c.state==3;}
   const auto beforeEntries=entries,beforeSpace=deniedSpace,beforeYield=deniedYield;
   auto start=std::chrono::steady_clock::now();check(cudaEventRecord(ev0));if(indexed){initializeLaneOrder<<<(n+127)/128,128>>>(orderDevice,n);thrust::sort(thrust::device_pointer_cast(orderDevice),thrust::device_pointer_cast(orderDevice)+n,LanePositionLess{a});linkLaneLeaders<<<(n+127)/128,128>>>(a,orderDevice,leaders,n);}
- advance<<<(n+127)/128,128>>>(a,b,n,dr,dm,dc,nm,t,dt,mode,exclusive,leaders);check(cudaGetLastError());check(cudaEventRecord(ev1));if(parallel){
+ motionContext.build(a,dm,dc,t,mode,exclusive);
+ advance<<<(n+127)/128,128>>>(a,b,n,dr,dm,dc,nm,t,dt,mode,exclusive,leaders,nullptr,-1,motionContext.head,motionContext.links,motionContext.available);check(cudaGetLastError());check(cudaEventRecord(ev1));if(parallel){
    prepareJunctions<<<(std::max(n,summary.capacity)+127)/128,128>>>(b,n,dm,dt,ds);check(cudaGetLastError());
    summarizeJunctions<<<(n+127)/128,128>>>(b,n,dr,dm,t,mode,ds);check(cudaGetLastError());
    requestJunctionEntry<<<(n+127)/128,128>>>(b,n,dr,dm,dc,nm,t,mode,exclusive,ds,dq);check(cudaGetLastError());
