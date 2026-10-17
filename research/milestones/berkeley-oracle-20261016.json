@@ -1,0 +1,16 @@
+{
+  "id": "berkeley-oracle-20261016",
+  "title": "Request-oracle junction scheduling decision gate",
+  "status": "validated-recorded-cases; allocator-gate-not-established",
+  "path": "milestones/berkeley-oracle-20261016",
+  "original_locations": [
+    "artifacts/current/berkeley-oracle-20261016",
+    "reports/berkeley-oracle-20261016"
+  ],
+  "simulation_commit": "90bbb63",
+  "reports": [
+    "milestones/berkeley-oracle-20261016/reports/berkeley-oracle-20261016/oracle-scheduling.pdf"
+  ],
+  "files": 186,
+  "report_url": "http://100.85.134.52:8093/berkeley-oracle/"
+}
