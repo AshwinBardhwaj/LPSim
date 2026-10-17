@@ -664,6 +664,22 @@
       ],
       "files": 186,
       "report_url": "http://100.85.134.52:8093/berkeley-oracle/"
+    },
+    {
+      "id": "berkeley-cooperative-20261016",
+      "title": "Cooperative junction arbitration and held-out threshold experiment",
+      "status": "validated-recorded-cases; allocator-gate-not-established",
+      "path": "milestones/berkeley-cooperative-20261016",
+      "original_locations": [
+        "artifacts/current/berkeley-cooperative-20261016",
+        "reports/berkeley-cooperative-20261016"
+      ],
+      "simulation_commit": "66497c5",
+      "reports": [
+        "milestones/berkeley-cooperative-20261016/reports/berkeley-cooperative-20261016/cooperative-junctions.pdf"
+      ],
+      "files": 517,
+      "report_url": null
     }
   ]
 }
