@@ -697,6 +697,23 @@
       ],
       "files": 777,
       "report_url": null
+    },
+    {
+      "id": "vehicle-allocation-oracle-20261018",
+      "title": "Common vehicle-task assignment and measured-cost oracle experiment",
+      "status": "exact-equivalence-passed; state-and-oracle-charged-gate-failed; identity-control-passed",
+      "path": "milestones/vehicle-allocation-oracle-20261018",
+      "original_locations": [
+        "artifacts/current/vehicle-allocation-oracle-20261018",
+        "reports/vehicle-allocation-oracle-20261018"
+      ],
+      "simulation_commit": "c3fdb91",
+      "experiment_commit": "9cabdf5",
+      "reports": [
+        "milestones/vehicle-allocation-oracle-20261018/reports/vehicle-allocation-oracle-20261018/vehicle-allocation-oracle.pdf"
+      ],
+      "files": 1474,
+      "report_url": null
     }
   ]
 }
