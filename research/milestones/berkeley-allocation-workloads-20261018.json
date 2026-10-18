@@ -1,0 +1,17 @@
+{
+  "id": "berkeley-allocation-workloads-20261018",
+  "title": "Frozen vehicle allocator specification and Berkeley workload coverage",
+  "status": "validated-workload-coverage; allocator-not-yet-tested",
+  "path": "milestones/berkeley-allocation-workloads-20261018",
+  "original_locations": [
+    "artifacts/current/berkeley-allocation-workloads-20261018",
+    "reports/berkeley-allocation-workloads-20261018"
+  ],
+  "simulation_commit": "c3fdb91",
+  "experiment_commit": "0a60251",
+  "reports": [
+    "milestones/berkeley-allocation-workloads-20261018/reports/berkeley-allocation-workloads-20261018/allocation-workloads.pdf"
+  ],
+  "files": 777,
+  "report_url": null
+}
