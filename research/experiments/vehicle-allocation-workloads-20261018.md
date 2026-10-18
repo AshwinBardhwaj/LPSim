@@ -1,0 +1,27 @@
+# Vehicle-batch allocator: frozen specification and workload gate
+
+## Scope
+Steps 1–2 only: freeze the experiment and capture representative synthetic Berkeley workloads. No allocator, predictor, kernel optimization, or performance win is claimed here.
+
+Baseline: archived berkeley-junction-index-20261016/simulator, exact binary hash in the run manifest. Leader index=1, motion context=3, parallel following junction backend, request index=1, 128-thread launches, dt=0.25 s, 600 s horizon, synthetic 72 s controller. Preserve existing networks and milestones. No recalibration or changes to traffic equations, memory storage, or lookup structures.
+
+## Future allocation mechanism
+An immutable pre-motion snapshot is readable by all vehicle-update tasks. A task is a stable vehicle ID; it writes only that vehicle's next-state record. The allocator can assign IDs to equal-capacity batches, map batches to CUDA blocks, and order batches. Block size starts fixed at 128. Storage, stable priority IDs, routes, and arithmetic remain unchanged. Every record, including pending/completed records requiring copy/update semantics, must be handled exactly once. A common indirection path must be compared with the unmodified baseline so its overhead is visible. Reordering in-place state is prohibited.
+
+This mechanism initially controls the advance vehicle-update stage, not the whole simulation. It can affect warp branch grouping, memory access locality, per-block workload imbalance and readiness. It does not promise direct SM reservation or control of hardware warp scheduling. Global leader sorting, motion-context construction, junction preparation/admission, spawning, and existing stage barriers remain unchanged. Their time stays in total-step and end-to-end reports. The existing advance_gpu_ms includes leader sorting and motion-context construction: it is NOT isolated motion-kernel time. Before any allocator benefit claim, separate these components with CUDA events/Nsight without changing their calculations.
+
+Future policies: fixed geographic batches, active-count-balanced batches, state-based assignment, and a measured-cost oracle. Use identical task calculations, task storage, block size, and synchronization. Charge task-list construction, transfers, dispatch, and barriers; report supplied-free schedules separately. Validate full next-state and reservation equivalence before timing. Oracle fitting and evaluation timing repetitions must be separate. No transfer or allocation claims from these workload counts alone.
+
+## Demand assumptions and matrix
+Cached Berkeley edges lack highway class, road names and measured traffic counts. Lane count and speed are explicitly proxies for road importance. Use existing lane-continuous OD route pool (2048 routes, 2–32 roads), retaining valid transitions and randomness. Favor routes using higher-capacity roads, with a uniform mixture to retain low-capacity routes. This is topology-informed synthetic demand, not a calibrated Berkeley travel-demand model; route-pool coverage and lane continuity are limitations.
+
+24 cases: 2048 / 8192 / 16384 requested trips × distributed / concentrated / mixed / bursty arrivals × seeds 1801 / 1802. All use controller mode 0. Generation weights and timing distributions are frozen in prepared.json before any runs. Seeds and routes are reproducible; volume levels are nested prefixes of the same generated demand per pattern/seed.
+
+Split before execution: training = seed1801 distributed/concentrated (6 cases); validation = seed1801 mixed (3); test = all seed1802 and seed1801 bursty (15). Bursty demand is excluded from fitting. No fitting in this phase. Region IDs 12–15 are reserved for a later geographic transfer diagnostic; all regions remain present as physical context. Future regional fitting excludes those region labels. This is one network, not cross-network validation.
+
+## Capture, measurements and gate
+Save exact binary pre-step snapshots every 30 s (0–570), plus every-step population and stage timings and sampled trajectories. Distinguish requested, future departures, eligible-but-pending, road-stopped (<0.5 m/s), road-moving, connectors and completed. Record entries, completions, blocked decisions, speeds, lane leaders/followers and approach locations. Spatial counts are workload proxies, not measured regional computational costs.
+
+Exploratory timing: one full run per case; no speedup claims or stable performance estimates from it. GPU times exclude host validation/output; calculation time includes host launching and CUDA waits but excludes subsequent host correctness checks. Preserve all failures; no invalid case may enter a validated allocation benchmark.
+
+Gate set before execution, evaluated over matched windows 60,180,300,450 s: (A) largest matched on-road+connector population at least 3x the 2048-trip counterpart in at least two demand families; (B) at least one window has >=4 nonempty regions with >=50 road vehicles and >=0.25 difference between highest/lowest regional stopped fractions; (C) at least one window has >=500 moving road vehicles; (D) all counted conservation and simulator movement/gap/conflict checks pass. Also report empty regions and regional coefficient of variation. These are practical workload-coverage thresholds, not universal GPU saturation criteria. If the gate fails, describe which population or coverage is missing; do not relabel queued/pending demand as active work.
