@@ -714,6 +714,23 @@
       ],
       "files": 1474,
       "report_url": null
+    },
+    {
+      "id": "vehicle-allocation-locality-20261018",
+      "title": "Contiguous original-order tile allocator timing and Nsight diagnostics",
+      "status": "exact-equivalence-passed; charged-gate-failed; supplied-schedules-match-original",
+      "path": "milestones/vehicle-allocation-locality-20261018",
+      "original_locations": [
+        "artifacts/current/vehicle-allocation-locality-20261018",
+        "reports/vehicle-allocation-locality-20261018"
+      ],
+      "simulation_commit": "c3fdb91",
+      "experiment_commit": "6f9d75e",
+      "reports": [
+        "milestones/vehicle-allocation-locality-20261018/reports/vehicle-allocation-locality-20261018/vehicle-allocation-locality.pdf"
+      ],
+      "files": 1538,
+      "report_url": null
     }
   ]
 }
