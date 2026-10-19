@@ -731,6 +731,23 @@
       ],
       "files": 1538,
       "report_url": null
+    },
+    {
+      "id": "berkeley-block-imbalance-20261019",
+      "title": "Berkeley safe motion tasks and measured block imbalance",
+      "status": "full-runs-and-exact-replay-validated; block-tail-measured; allocator-not-tested",
+      "path": "milestones/berkeley-block-imbalance-20261019",
+      "original_locations": [
+        "artifacts/current/berkeley-block-imbalance-20261019",
+        "reports/berkeley-block-imbalance-20261019"
+      ],
+      "simulation_commit": "c3fdb91",
+      "experiment_commit": "1a62e28",
+      "reports": [
+        "milestones/berkeley-block-imbalance-20261019/reports/berkeley-block-imbalance-20261019/block-imbalance.pdf"
+      ],
+      "files": 976,
+      "report_url": null
     }
   ]
 }
