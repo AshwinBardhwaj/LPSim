@@ -1,0 +1,11 @@
+# Berkeley original-order motion block imbalance study
+
+Nine new 600-second trajectories: requested populations 2048, 8192, 16384; distributed, concentrated and bursty departures; seed 1901. Route weights mix 75% uniform route-pool mass with 25% normalized lane/speed importance, retaining randomness. Road importance is a proxy, not measured Berkeley traffic. Fixed 0.25 s timestep, 72 s controller, current indexed/following backend. Original milestones remain unchanged.
+
+Safe candidate task: 32 or 128 consecutive stable vehicle IDs reading immutable pre-motion state and writing disjoint next-state records. Leaders and connector/receiving context are built before motion. Do not skip stopped vehicles. Pending/completed records still require defined next-state handling. Junction admission/priority/reservations remain a separate stage. No new allocator is implemented here.
+
+Capture 60/180/300/450 s windows. For each window, three processes with three warmups and ten uninstrumented original complete-step timing repetitions. Shared leader/index work, motion, junction stages and host synchronized wall time reported separately. Output/checker I/O excluded. Full-run wall includes diagnostics and is not a pure throughput benchmark.
+
+Separate instrumentation uses globaltimer timestamps at block entry (followed by an entry barrier) and after a block-end barrier, plus SM ID, on the original contiguous 128-thread assignment. All chosen record populations are multiples of 128. Compare exact motion/final vehicle bytes and semantic reservations against original. Ten instrumented repetitions per process; event timings quantify instrumentation perturbation. Instrumented block elapsed includes scheduling/stalls and added entry/end barriers, not isolated compute cost. Do not use these timings as uninstrumented performance.
+
+Report per-block duration distributions, start/end distribution, last-10%-completion tail, SM last-finish spread, and state composition. Later block starts and final scheduling waves can create tails without fixable imbalance; do not claim the completion-tail fraction is attainable allocator speedup. Repeated observations of one snapshot are not independent traffic realizations. No predictor, compaction or dynamic queue is tested.
