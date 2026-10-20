@@ -748,6 +748,23 @@
       ],
       "files": 976,
       "report_url": null
+    },
+    {
+      "id": "leader-radix-20261019",
+      "title": "Validated radix leader-index reconstruction",
+      "status": "validated-exact-equivalence; paired-timing-improvement",
+      "path": "milestones/leader-radix-20261019",
+      "original_locations": [
+        "artifacts/current/leader-radix-20261019",
+        "reports/leader-radix-20261019"
+      ],
+      "simulation_commit": "4379029ce4343529f317ff871ff2f3c24bbbd2a6",
+      "experiment_commit": "4379029ce4343529f317ff871ff2f3c24bbbd2a6",
+      "reports": [
+        "milestones/leader-radix-20261019/reports/leader-radix-20261019/leader-radix.pdf"
+      ],
+      "files": 561,
+      "report_url": null
     }
   ]
 }
