@@ -1,5 +1,8 @@
 #include "junction_simulator.h"
 #include <cuda_runtime.h>
+#include <cub/device/device_radix_sort.cuh>
+#include <thrust/device_ptr.h>
+#include <thrust/sort.h>
 #include <algorithm>
 #include <cmath>
 #include <fstream>
@@ -189,6 +192,7 @@ __global__ void spawnJunctionVehicles(Car* cars,int n,int nr,const JunctionSumma
 
 }
 #include "../../tools/leader_index.cuh"
+#include "../../tools/leader_radix.cuh"
 #include "../../tools/junction_request_index.cuh"
 void runScalableJunctionSimulation(const char* scenario){
  bool parallel=!(std::getenv("LPSIM_JUNCTION_PARALLEL")&&std::string(std::getenv("LPSIM_JUNCTION_PARALLEL"))=="0");
@@ -224,7 +228,13 @@ void runScalableJunctionSimulation(const char* scenario){
  auto* ds=device(std::vector<JunctionSummary>{summary});EntryRequest* dq;check(cudaMalloc(&dq,n*sizeof(EntryRequest)));
  MotionContext motionContext(nr,nm,n);
  JunctionRequestIndex requestIndex(n,nj);
- bool indexed=std::getenv("LPSIM_LEADER_INDEX")&&std::string(std::getenv("LPSIM_LEADER_INDEX"))=="1";int *orderDevice=nullptr,*leaders=nullptr;if(indexed){check(cudaMalloc(&orderDevice,n*sizeof(int)));check(cudaMalloc(&leaders,n*sizeof(int)));}
+ bool indexed=std::getenv("LPSIM_LEADER_INDEX")&&std::string(std::getenv("LPSIM_LEADER_INDEX"))=="1";
+ const char* sortOption=std::getenv("LPSIM_LEADER_SORT");
+ std::string sortMode=sortOption?sortOption:"radix";
+ if(indexed&&sortMode!="radix"&&sortMode!="comparator")throw std::runtime_error("LPSIM_LEADER_SORT must be radix or comparator");
+ bool radix=sortMode=="radix";
+ if(indexed&&radix&&nr>=(1<<29))throw std::runtime_error("Road IDs exceed radix leader key capacity");
+ LeaderIndex laneIndex(n,indexed,radix);int* leaders=laneIndex.leaders;
  int trajectoryStride=std::getenv("LPSIM_TRAJECTORY_STRIDE")?std::max(1,atoi(std::getenv("LPSIM_TRAJECTORY_STRIDE"))):2;
  std::ofstream traj("states.csv"),events("events.csv"),signals("signals.csv"),series("timeseries.csv");
  traj<<"time,id,state,edge,lane,movement,pos,speed\n";events<<"time,id,event,movement,turn,axis,light,wait_seconds\n";signals<<"time,movement,state\n";series<<"time,active,stopped,in_junction,completed,pending\n";
@@ -239,7 +249,7 @@ void runScalableJunctionSimulation(const char* scenario){
   int prePending=0,preFuture=0,preStopped=0,preMoving=0,preConnector=0,preCompleted=0;
   for(const auto& c:cars){prePending+=c.state==0;preFuture+=c.state==0&&c.departure>t;preStopped+=c.state==1&&c.v<.5f;preMoving+=c.state==1&&c.v>=.5f;preConnector+=c.state==2;preCompleted+=c.state==3;}
   const auto beforeEntries=entries,beforeSpace=deniedSpace,beforeYield=deniedYield;
-  auto start=std::chrono::steady_clock::now();check(cudaEventRecord(ev0));if(indexed){initializeLaneOrder<<<(n+127)/128,128>>>(orderDevice,n);thrust::sort(thrust::device_pointer_cast(orderDevice),thrust::device_pointer_cast(orderDevice)+n,LanePositionLess{a});linkLaneLeaders<<<(n+127)/128,128>>>(a,orderDevice,leaders,n);}
+  auto start=std::chrono::steady_clock::now();check(cudaEventRecord(ev0));laneIndex.build(a);
  motionContext.build(a,dm,dc,t,mode,exclusive);
  advance<<<(n+127)/128,128>>>(a,b,n,dr,dm,dc,nm,t,dt,mode,exclusive,leaders,nullptr,-1,motionContext.head,motionContext.links,motionContext.available);check(cudaGetLastError());check(cudaEventRecord(ev1));if(parallel){
    prepareJunctions<<<(std::max(n,summary.capacity)+127)/128,128>>>(b,n,dm,dt,ds);check(cudaGetLastError());
@@ -274,7 +284,7 @@ void runScalableJunctionSimulation(const char* scenario){
  std::ofstream metrics("metrics.json");metrics<<"{\"trips\":"<<n<<",\"completed\":"<<completed<<",\"active\":"<<active<<",\"pending\":"<<pending<<",\"steps\":"<<steps<<",\"calculation_seconds\":"<<calc<<",\"gap_failures\":"<<gapFailures<<",\"conflict_failures\":"<<conflictFailures<<",\"invalid_states\":"<<invalid<<",\"stopped_in_junction_samples\":"<<insideStops<<",\"entries\":"<<entries<<",\"right_on_red_entries\":"<<redTurns<<",\"downstream_blocked_decisions\":"<<deniedSpace<<",\"yield_blocked_decisions\":"<<deniedYield<<",\"parallel_junctions\":"<<parallel<<",\"exclusive\":"<<exclusive<<",\"advance_gpu_ms\":"<<advanceMs<<",\"junction_gpu_ms\":"<<junctionMs<<",\"max_same_movement_occupancy\":"<<maxSame<<"}\n";
  check(cudaEventDestroy(ev0));check(cudaEventDestroy(ev1));check(cudaEventDestroy(ev2));
  for(auto p:{summary.nearest,summary.arrival,summary.tail})check(cudaFree(p));for(auto p:{summary.busy,summary.reserved,summary.owner,summary.spawn,summary.granted,summary.junctionOffsets})check(cudaFree(p));check(cudaFree(ds));check(cudaFree(dq));
- if(indexed){check(cudaFree(orderDevice));check(cudaFree(leaders));}check(cudaFree(a));check(cudaFree(b));check(cudaFree(dr));check(cudaFree(dm));check(cudaFree(dc));
+ check(cudaFree(a));check(cudaFree(b));check(cudaFree(dr));check(cudaFree(dm));check(cudaFree(dc));
  std::cout<<"Junction run completed: "<<completed<<" / "<<n<<"; invariant failures "<<gapFailures+conflictFailures+invalid+insideStops<<std::endl;
  if(gapFailures||conflictFailures||invalid||insideStops)throw std::runtime_error("Junction invariant violation");
 }
