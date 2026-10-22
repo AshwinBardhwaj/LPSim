@@ -765,6 +765,23 @@
       ],
       "files": 561,
       "report_url": null
+    },
+    {
+      "id": "lane-layout-20261022",
+      "title": "Physical lane-order storage: exact equivalence, performance gate failed",
+      "status": "validated-snapshot-equivalence; no-net-layout-benefit",
+      "path": "milestones/lane-layout-20261022",
+      "original_locations": [
+        "artifacts/current/lane-layout-20261022",
+        "reports/lane-layout-20261022"
+      ],
+      "simulation_commit": "5b06740",
+      "experiment_commit": "a8de4d3736fe5cb6d73d5c98db98d407e1ec2b03",
+      "reports": [
+        "milestones/lane-layout-20261022/reports/lane-layout-20261022/lane-layout.pdf"
+      ],
+      "files": 248,
+      "report_url": null
     }
   ]
 }
