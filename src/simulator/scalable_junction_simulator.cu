@@ -71,6 +71,7 @@ __global__ void advance(const Car* old,Car* next,int n,const Road* roads,
  }
  next[i]=c;
 }
+#include "../../tools/compact_motion.cuh"
 // Deterministic junction arbitration on the GPU; all road propagation is parallel.
 // Conflicting movements remain exclusive; identical movements may form platoons.
 // Every admitted vehicle reserves one downstream storage slot until it exits.
@@ -235,6 +236,8 @@ void runScalableJunctionSimulation(const char* scenario){
  bool radix=sortMode=="radix";
  if(indexed&&radix&&nr>=(1<<29))throw std::runtime_error("Road IDs exceed radix leader key capacity");
  LeaderIndex laneIndex(n,indexed,radix);int* leaders=laneIndex.leaders;
+ bool compactMotion=std::getenv("LPSIM_COMPACT_MOTION")&&std::string(std::getenv("LPSIM_COMPACT_MOTION"))=="1";
+ CompactState hot{nullptr,n};if(compactMotion)check(cudaMalloc(&hot.values,14*n*sizeof(float)));
  int trajectoryStride=std::getenv("LPSIM_TRAJECTORY_STRIDE")?std::max(1,atoi(std::getenv("LPSIM_TRAJECTORY_STRIDE"))):2;
  std::ofstream traj("states.csv"),events("events.csv"),signals("signals.csv"),series("timeseries.csv");
  traj<<"time,id,state,edge,lane,movement,pos,speed\n";events<<"time,id,event,movement,turn,axis,light,wait_seconds\n";signals<<"time,movement,state\n";series<<"time,active,stopped,in_junction,completed,pending\n";
@@ -251,7 +254,7 @@ void runScalableJunctionSimulation(const char* scenario){
   const auto beforeEntries=entries,beforeSpace=deniedSpace,beforeYield=deniedYield;
   auto start=std::chrono::steady_clock::now();check(cudaEventRecord(ev0));laneIndex.build(a);
  motionContext.build(a,dm,dc,t,mode,exclusive);
- advance<<<(n+127)/128,128>>>(a,b,n,dr,dm,dc,nm,t,dt,mode,exclusive,leaders,nullptr,-1,motionContext.head,motionContext.links,motionContext.available);check(cudaGetLastError());check(cudaEventRecord(ev1));if(parallel){
+ if(compactMotion){extractCompact<<<(n+127)/128,128>>>(a,hot);advanceCompact<<<(n+127)/128,128>>>(hot,b,n,dr,dm,dc,nm,t,dt,mode,exclusive,leaders,nullptr,-1,motionContext.head,motionContext.links,motionContext.available);}else advance<<<(n+127)/128,128>>>(a,b,n,dr,dm,dc,nm,t,dt,mode,exclusive,leaders,nullptr,-1,motionContext.head,motionContext.links,motionContext.available);check(cudaGetLastError());check(cudaEventRecord(ev1));if(parallel){
    prepareJunctions<<<(std::max(n,summary.capacity)+127)/128,128>>>(b,n,dm,dt,ds);check(cudaGetLastError());
    summarizeJunctions<<<(n+127)/128,128>>>(b,n,dr,dm,t,mode,ds);check(cudaGetLastError());
    requestJunctionEntry<<<(n+127)/128,128>>>(b,n,dr,dm,dc,nm,t,mode,exclusive,ds,dq);check(cudaGetLastError());
@@ -284,7 +287,7 @@ void runScalableJunctionSimulation(const char* scenario){
  std::ofstream metrics("metrics.json");metrics<<"{\"trips\":"<<n<<",\"completed\":"<<completed<<",\"active\":"<<active<<",\"pending\":"<<pending<<",\"steps\":"<<steps<<",\"calculation_seconds\":"<<calc<<",\"gap_failures\":"<<gapFailures<<",\"conflict_failures\":"<<conflictFailures<<",\"invalid_states\":"<<invalid<<",\"stopped_in_junction_samples\":"<<insideStops<<",\"entries\":"<<entries<<",\"right_on_red_entries\":"<<redTurns<<",\"downstream_blocked_decisions\":"<<deniedSpace<<",\"yield_blocked_decisions\":"<<deniedYield<<",\"parallel_junctions\":"<<parallel<<",\"exclusive\":"<<exclusive<<",\"advance_gpu_ms\":"<<advanceMs<<",\"junction_gpu_ms\":"<<junctionMs<<",\"max_same_movement_occupancy\":"<<maxSame<<"}\n";
  check(cudaEventDestroy(ev0));check(cudaEventDestroy(ev1));check(cudaEventDestroy(ev2));
  for(auto p:{summary.nearest,summary.arrival,summary.tail})check(cudaFree(p));for(auto p:{summary.busy,summary.reserved,summary.owner,summary.spawn,summary.granted,summary.junctionOffsets})check(cudaFree(p));check(cudaFree(ds));check(cudaFree(dq));
- check(cudaFree(a));check(cudaFree(b));check(cudaFree(dr));check(cudaFree(dm));check(cudaFree(dc));
+ if(hot.values)check(cudaFree(hot.values));check(cudaFree(a));check(cudaFree(b));check(cudaFree(dr));check(cudaFree(dm));check(cudaFree(dc));
  std::cout<<"Junction run completed: "<<completed<<" / "<<n<<"; invariant failures "<<gapFailures+conflictFailures+invalid+insideStops<<std::endl;
  if(gapFailures||conflictFailures||invalid||insideStops)throw std::runtime_error("Junction invariant violation");
 }
