@@ -782,6 +782,23 @@
       ],
       "files": 248,
       "report_url": null
+    },
+    {
+      "id": "compact-motion-20261022",
+      "title": "Validated compact motion baseline",
+      "status": "validated-full-trajectory-equivalence; faster-baseline",
+      "path": "milestones/compact-motion-20261022",
+      "original_locations": [
+        "artifacts/current/compact-motion-20261022",
+        "reports/compact-motion-20261022"
+      ],
+      "simulation_commit": "89cb7c2f023e206c4719e83db34dd85fd9e01a0b",
+      "experiment_commit": "89cb7c2f023e206c4719e83db34dd85fd9e01a0b",
+      "reports": [
+        "milestones/compact-motion-20261022/reports/compact-motion-20261022/README.md"
+      ],
+      "files": 385,
+      "report_url": null
     }
   ]
 }
