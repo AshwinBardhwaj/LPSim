@@ -799,6 +799,23 @@
       ],
       "files": 385,
       "report_url": null
+    },
+    {
+      "id": "memory-policy-20261022",
+      "title": "Compact motion baseline and measured regional memory policies",
+      "status": "validated-exact; compact-baseline-promoted; optional-policies-failed-performance-gate",
+      "path": "milestones/memory-policy-20261022",
+      "original_locations": [
+        "artifacts/current/memory-policy-20261022",
+        "reports/memory-policy-20261022"
+      ],
+      "simulation_commit": "89cb7c2f023e206c4719e83db34dd85fd9e01a0b",
+      "experiment_commit": "3c1b5b1e692527f9be2caba07e1393276c1a24f0",
+      "reports": [
+        "milestones/memory-policy-20261022/reports/memory-policy-20261022/memory-policy.pdf"
+      ],
+      "files": 1619,
+      "report_url": null
     }
   ]
 }
