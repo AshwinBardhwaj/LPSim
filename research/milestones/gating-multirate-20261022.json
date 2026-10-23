@@ -1,0 +1,17 @@
+{
+  "id": "gating-multirate-20261022",
+  "title": "Exact request gating and guarded multi-rate Berkeley experiment",
+  "status": "exact-gating-validated; oracle-loop-opportunity; multirate-not-promoted",
+  "path": "milestones/gating-multirate-20261022",
+  "original_locations": [
+    "artifacts/current/gating-multirate-20261022",
+    "reports/gating-multirate-20261022"
+  ],
+  "simulation_commit": "89cb7c2f023e206c4719e83db34dd85fd9e01a0b",
+  "experiment_commit": "8a316028c17affc26e979c13fffba17eaad673f6",
+  "reports": [
+    "milestones/gating-multirate-20261022/reports/gating-multirate-20261022/gating-multirate.pdf"
+  ],
+  "files": 3212,
+  "report_url": null
+}
