@@ -1,0 +1,9 @@
+{
+  "cuda_tag": "nvidia/cuda:12.6.3-devel-ubuntu22.04",
+  "cuda_linux_amd64": "nvidia/cuda@sha256:1608a19a5d6f013d36abfb9ad50a42b4c0ef86f4ab48e351c6899f0280b946c1",
+  "modal_sdk": "1.6.3",
+  "python": "3.11",
+  "gpu_request": "A100-40GB:3",
+  "architecture": "sm_80",
+  "resolved_from_public_registries": "2026-10-27"
+}

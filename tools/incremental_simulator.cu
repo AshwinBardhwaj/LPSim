@@ -1,0 +1,348 @@
+// Generated index-maintenance experiment; production unchanged.
+// Generated experimental runner; production implementation unchanged.
+#include "../src/simulator/junction_simulator.h"
+#include <cuda_runtime.h>
+#include <cub/device/device_radix_sort.cuh>
+#include <thrust/device_ptr.h>
+#include <thrust/sort.h>
+#include <thrust/copy.h>
+#include <algorithm>
+#include <cmath>
+#include <fstream>
+#include <iomanip>
+#include <iostream>
+#include <stdexcept>
+#include <string>
+#include <vector>
+#include <chrono>
+#include <cstdlib>
+#include <sstream>
+#include <numeric>
+
+namespace {
+constexpr int MAX_ROUTE=32;
+constexpr float SPACING=6.5f; // 4.5 m vehicle + 2 m stopped gap
+struct Road { int from,to,lanes; float length,speed; };
+struct Movement { int junction,in,out,inLane,outLane,turn,axis;float length;int rtor; };
+struct Car { int state=0,k=0,n=0,mid=-1,event=0,denial=0;int edges[MAX_ROUTE],lanes[MAX_ROUTE],moves[MAX_ROUTE];float departure=0,pos=0,v=0,stopped=0,entryWait=0; };
+void check(cudaError_t e){if(e!=cudaSuccess)throw std::runtime_error(cudaGetErrorString(e));}
+template<class T>T* device(const std::vector<T>& a){T* p;check(cudaMalloc(&p,a.size()*sizeof(T)));check(cudaMemcpy(p,a.data(),a.size()*sizeof(T),cudaMemcpyHostToDevice));return p;}
+// CSR offsets occupy [0,nm]; sorted neighbor IDs follow.
+__host__ __device__ bool conflictsWith(const int* csr,int nm,int a,int b){
+ int lo=csr[a],hi=csr[a+1];while(lo<hi){int k=(lo+hi)/2;int v=csr[nm+1+k];if(v<b)lo=k+1;else hi=k;}
+ return lo<csr[a+1]&&csr[nm+1+lo]==b;
+}
+// 72 s: NS through 20 + yellow 3 + all red 1; NS left 8+3+1;
+// EW through 20+3+1; EW left 8+3+1. No new entry on yellow.
+__host__ __device__ int indication(const Movement& m,float t,int mode){
+ if(mode==1)return 0;if(mode==2)return 2;
+ float p=fmodf(t,72.f);if(m.axis==1)p=fmodf(p+36.f,72.f);
+ if(m.turn==1){if(p>=24 && p<32)return 2;if(p>=32 && p<35)return 1;}
+ else {if(p<20)return 2;if(p<23)return 1;}
+ return 0;
+}
+__host__ __device__ bool clearance(float t,int mode){if(mode)return false;float p=fmodf(t,36.f);return (p>=23&&p<24)||p>=35;}
+#include "motion_context.cuh"
+__global__ void advance(const Car* old,Car* next,int n,const Road* roads,
+                        const Movement* moves,const int* conflict,int nm,float t,float dt,int mode,bool exclusive,const int* leaders=nullptr,const int* work=nullptr,int region=-1,const int* connectorHead=nullptr,const int* connectorNext=nullptr,const int* movementOpen=nullptr){
+ int i=blockIdx.x*blockDim.x+threadIdx.x;if(i>=n)return;if(work&&work[i]!=region){next[i]=old[i];return;}Car c=old[i];c.event=0;c.denial=0;
+ if(c.state==1){const int edge=c.edges[c.k],lane=c.lanes[c.k];const Road r=roads[edge];
+  bool open=c.k==c.n-1;
+  if(c.k+1<c.n){int mid=c.moves[c.k];const Movement m=moves[mid];open=indication(m,t,mode)==2;
+   if(movementOpen)open=movementOpen[mid];
+   else if(open)for(int j=0;j<n;++j){const Car& d=old[j];
+    if((d.state==2&&conflictsWith(conflict,nm,mid,d.mid)&&(exclusive||mid!=d.mid))||
+       (d.state==1&&d.edges[d.k]==m.out&&d.lanes[d.k]==m.outLane&&d.pos<SPACING+8.f)){open=false;break;}}
+  }
+  float gap=open?1.e6f:r.length-c.pos+2,leaderV=0,bound=r.length;
+  if(leaders){if(leaders[i]>=0){const Car& d=old[leaders[i]];float g=d.pos-c.pos-4.5f;if(g<gap){gap=g;leaderV=d.v;}bound=fminf(bound,d.pos-SPACING);}}else for(int j=0;j<n;++j){if(j==i)continue;const Car& d=old[j];if(d.state==1&&d.edges[d.k]==edge&&d.lanes[d.k]==lane&&d.pos>c.pos){float g=d.pos-c.pos-4.5f;if(g<gap){gap=g;leaderV=d.v;}bound=fminf(bound,d.pos-SPACING);}}
+  int chosenConnector=-1;
+  for(int j=connectorHead?connectorHead[edge*8+lane]:0;j>=0&&j<n;j=connectorHead?connectorNext[j]:j+1){const Car& d=old[j];if(d.state==2&&moves[d.mid].in==edge&&moves[d.mid].inLane==lane){
+   float distance=r.length-c.pos+d.pos;float g=distance-4.5f;
+   // Preserve the original ascending-ID tie choice despite atomic list order.
+   if(g<gap||(g==gap&&chosenConnector>=0&&j<chosenConnector)){gap=g;leaderV=d.v;chosenConnector=j;}
+   bound=fminf(bound,r.length+d.pos-SPACING);
+  }}
+  float desired=1.38075f+fmaxf(0.f,c.v*.5433028f+c.v*(c.v-leaderV)/(2*sqrtf(.5570409f*2.902058f)));
+  float acc=.5570409f*(1-powf(c.v/r.speed,4)-powf(desired/fmaxf(.05f,gap),2));
+  float speed=fmaxf(0.f,c.v+acc*dt);float proposed=c.pos+.5f*(c.v+speed)*dt;
+  if(proposed>bound){proposed=fmaxf(c.pos,bound);speed=0;}
+  c.pos=proposed;c.v=speed;
+  if(r.length-c.pos<.1f && c.v<.3f){c.pos=r.length;c.v=0;}
+  c.stopped=(c.v<.1f&&r.length-c.pos<.11f)?c.stopped+dt:0;
+  if(c.k==c.n-1&&r.length-c.pos<.11f)c.state=3;
+ }
+ next[i]=c;
+}
+#include "compact_motion.cuh"
+#include "multirate_motion.cuh"
+// Deterministic junction arbitration on the GPU; all road propagation is parallel.
+// Conflicting movements remain exclusive; identical movements may form platoons.
+// Every admitted vehicle reserves one downstream storage slot until it exits.
+__global__ void junctionStep(Car* cars,int n,const Road* roads,const Movement* moves,
+                            const int* conflict,int nm,float t,float dt,int mode,bool exclusive){
+ if(blockIdx.x||threadIdx.x)return;
+ for(int i=0;i<n;++i){Car& c=cars[i];if(c.state!=2)continue;const Movement m=moves[c.mid];c.pos+=c.v*dt;
+  if(c.pos>=m.length){c.pos-=m.length;c.k++;c.state=1;c.event=3;c.stopped=0;c.mid=-1;}}
+ // Summarize occupied exits and approaching green movements once per step.
+ float nearest[512],arrival[512],tail[512];int busy[512],reserved[512],owner[512];
+ for(int k=0;k<512;++k){nearest[k]=1.e9f;arrival[k]=1.e9f;busy[k]=0;reserved[k]=0;owner[k]=-1;tail[k]=1.e9f;}
+ for(int j=0;j<n;++j){const Car& d=cars[j];
+  if(d.state==2){busy[d.mid]++;tail[d.mid]=fminf(tail[d.mid],d.pos);int key=moves[d.mid].out*8+moves[d.mid].outLane;reserved[key]++;owner[key]=d.mid;}
+  if(d.state==1){int key=d.edges[d.k]*8+d.lanes[d.k];nearest[key]=fminf(nearest[key],d.pos);
+   if(d.k+1<d.n){int mid=d.moves[d.k];if(indication(moves[mid],t,mode)==2)arrival[mid]=fminf(arrival[mid],(roads[d.edges[d.k]].length-d.pos)/fmaxf(1.f,d.v));}}
+ }
+ // Green traffic has priority over right-on-red candidates.
+ for(int pass=0;pass<2;++pass)for(int i=0;i<n;++i){Car& c=cars[i];
+  if(c.state!=1||c.k+1>=c.n||roads[c.edges[c.k]].length-c.pos>.11f)continue;
+  int mid=c.moves[c.k];const Movement m=moves[mid];int light=indication(m,t,mode);
+  bool red=light==0&&m.turn==-1&&m.rtor&&c.stopped>=2.f&&!clearance(t,mode);
+  if((pass==0&&light!=2)||(pass==1&&(!red||light==2)))continue;
+  int exitKey=m.out*8+m.outLane;
+  if(reserved[exitKey]&&(exclusive||owner[exitKey]!=mid)){c.denial=1;continue;}
+  float speed=m.turn==0?7.f:4.f;
+  if(!exclusive&&tail[mid]<fmaxf(SPACING,2.f*speed)){c.denial=1;continue;}
+  if(fminf(nearest[exitKey],roads[m.out].length)<SPACING*(reserved[exitKey]+1)+8.f){c.denial=2;continue;}
+  bool blocked=false;
+  for(int ci=conflict[mid];ci<conflict[mid+1];++ci){int j=conflict[nm+1+ci];
+   if(busy[j]&&(exclusive||j!=mid)){blocked=true;c.denial=1;break;}
+   if(pass==1&&j!=mid&&arrival[j]<4.f){blocked=true;c.denial=3;break;}
+  }
+  if(blocked)continue;
+  c.entryWait=c.stopped;c.state=2;c.mid=mid;c.pos=0;c.v=m.turn==0?7.f:4.f;c.event=pass==1?2:1;c.stopped=0;
+  busy[mid]++;tail[mid]=0;reserved[exitKey]++;owner[exitKey]=mid;
+ }
+ // Spawn at the outer-network road entrance, never on an internal connector.
+ for(int i=0;i<n;++i){Car& c=cars[i];if(c.state!=0||c.departure>t)continue;
+  int key=c.edges[0]*8+c.lanes[0];
+  if(nearest[key]>=SPACING&&!reserved[key]){c.state=1;c.pos=0;c.v=0;nearest[key]=0;}
+ }
+}
+// All junction-stage reads are separated from writes by kernel boundaries.
+// Each receiving lane belongs to exactly one junction (Road::from).
+struct JunctionSummary {
+ float *nearest,*arrival,*tail;
+ int *busy,*reserved,*owner,*spawn,*granted,*junctionOffsets;
+ int capacity;
+};
+struct EntryRequest { int mid,pass,blockedIndex,blockedReason; };
+__device__ void minPositive(float* target,float value){atomicMin(reinterpret_cast<int*>(target),__float_as_int(value));}
+__global__ void prepareJunctions(Car* cars,int n,const Movement* moves,float dt,JunctionSummary* s){
+ int i=blockIdx.x*blockDim.x+threadIdx.x;
+ if(i<s->capacity){s->nearest[i]=s->arrival[i]=s->tail[i]=1.e9f;s->busy[i]=s->reserved[i]=0;s->owner[i]=-1;s->spawn[i]=n;}
+ if(i<n){Car& c=cars[i];if(c.state==2){const Movement m=moves[c.mid];c.pos+=c.v*dt;
+  if(c.pos>=m.length){c.pos-=m.length;c.k++;c.state=1;c.event=3;c.stopped=0;c.mid=-1;}}}
+}
+__global__ void summarizeJunctions(const Car* cars,int n,const Road* roads,const Movement* moves,float t,int mode,JunctionSummary* s){
+ int i=blockIdx.x*blockDim.x+threadIdx.x;if(i>=n)return;const Car& c=cars[i];
+ if(c.state==2){int key=moves[c.mid].out*8+moves[c.mid].outLane;atomicAdd(s->busy+c.mid,1);minPositive(s->tail+c.mid,c.pos);atomicAdd(s->reserved+key,1);atomicMax(s->owner+key,c.mid);}
+ if(c.state==1){minPositive(s->nearest+c.edges[c.k]*8+c.lanes[c.k],c.pos);
+  if(c.k+1<c.n){int mid=c.moves[c.k];if(indication(moves[mid],t,mode)==2)minPositive(s->arrival+mid,(roads[c.edges[c.k]].length-c.pos)/fmaxf(1.f,c.v));}}
+ if(c.state==0&&c.departure<=t)atomicMin(s->spawn+c.edges[0]*8+c.lanes[0],i);
+}
+// One thread per vehicle evaluates signal/stop eligibility and existing conflicts.
+__global__ void requestJunctionEntry(const Car* cars,int n,const Road* roads,const Movement* moves,const int* conflict,int nm,float t,int mode,bool exclusive,const JunctionSummary* s,EntryRequest* requests,const int* candidates=nullptr,int candidateCount=0){
+ int i=blockIdx.x*blockDim.x+threadIdx.x;if(i>=(candidates?candidateCount:n))return;if(candidates)i=candidates[i];const Car& c=cars[i];EntryRequest r{-1,-1,nm,0};
+ if(c.state==1&&c.k+1<c.n&&roads[c.edges[c.k]].length-c.pos<=.11f){
+  int mid=c.moves[c.k];const Movement m=moves[mid];int light=indication(m,t,mode);
+  bool red=light==0&&m.turn==-1&&m.rtor&&c.stopped>=2.f&&!clearance(t,mode);
+  if(light==2||red){r.mid=mid;r.pass=light==2?0:1;
+   for(int ci=conflict[mid];ci<conflict[mid+1];++ci){int j=conflict[nm+1+ci];
+    if(s->busy[j]&&(exclusive||j!=mid)){r.blockedIndex=j;r.blockedReason=1;break;}
+    if(r.pass==1&&j!=mid&&s->arrival[j]<4.f){r.blockedIndex=j;r.blockedReason=3;break;}
+   }
+  }
+ }
+ requests[i]=r;
+}
+// Shared admission logic: preserve reservation checks, conflict order and priority.
+__device__ void admitJunctionRequest(Car* cars,int i,int pass,const Road* roads,const Movement* moves,
+ const int* conflict,int nm,bool exclusive,JunctionSummary* s,const EntryRequest& r,int* granted,int& count){
+  Car& c=cars[i];if(c.state!=1)return;const Movement m=moves[r.mid];int key=m.out*8+m.outLane;
+  if(s->reserved[key]&&(exclusive||s->owner[key]!=r.mid)){c.denial=1;return;}
+  float speed=m.turn==0?7.f:4.f;
+  if(!exclusive&&s->tail[r.mid]<fmaxf(SPACING,2.f*speed)){c.denial=1;return;}
+  if(fminf(s->nearest[key],roads[m.out].length)<SPACING*(s->reserved[key]+1)+8.f){c.denial=2;return;}
+  int blocked=r.blockedIndex,reason=r.blockedReason;
+  for(int k=0;k<count;++k){int j=granted[k];if(j<=blocked&&conflictsWith(conflict,nm,r.mid,j)&&(exclusive||j!=r.mid)){blocked=j;reason=1;}}
+  if(blocked<nm){c.denial=reason;return;}
+  c.entryWait=c.stopped;c.state=2;c.mid=r.mid;c.pos=0;c.v=speed;c.event=pass==1?2:1;c.stopped=0;
+  s->tail[r.mid]=0;s->reserved[key]++;s->owner[key]=r.mid;granted[count++]=r.mid;
+}
+// Reference: full request scan, retained for exact comparisons.
+__global__ void arbitrateJunctions(Car* cars,int n,const Road* roads,const Movement* moves,const int* conflict,int nm,int nj,bool exclusive,JunctionSummary* s,const EntryRequest* requests){
+ int junction=blockIdx.x*blockDim.x+threadIdx.x;if(junction>=nj)return;
+ int* granted=s->granted+s->junctionOffsets[junction];int count=0;
+ for(int pass=0;pass<2;++pass)for(int i=0;i<n;++i){
+  const EntryRequest r=requests[i];if(r.pass!=pass||moves[r.mid].junction!=junction)continue;
+  admitJunctionRequest(cars,i,pass,roads,moves,conflict,nm,exclusive,s,r,granted,count);
+ }
+}
+// Keys sorted by (junction, green-before-red pass, stable vehicle ID).
+// Optional junction list supports truly local diagnostic launches without copying cars.
+__global__ void arbitrateIndexedJunctions(Car* cars,int n,const Road* roads,const Movement* moves,const int* conflict,int nm,int nj,bool exclusive,JunctionSummary* s,const EntryRequest* requests,const unsigned long long* keys,const int* begin,const int* end,const int* junctionIds=nullptr,int selectedCount=0){
+ int slot=blockIdx.x*blockDim.x+threadIdx.x;if(slot>=(junctionIds?selectedCount:nj))return;
+ int junction=junctionIds?junctionIds[slot]:slot;
+ int* granted=s->granted+s->junctionOffsets[junction];int count=0;
+ for(int k=begin[junction];k<end[junction];++k){int i=static_cast<unsigned int>(keys[k]);const EntryRequest r=requests[i];
+  admitJunctionRequest(cars,i,r.pass,roads,moves,conflict,nm,exclusive,s,r,granted,count);
+ }
+}
+// One writer per receiving lane. Winner IDs came from the immutable pending set;
+// arbitration has finished publishing receiving-space reservations before this launch.
+__global__ void spawnJunctionVehicles(Car* cars,int n,int nr,const JunctionSummary* s){
+ int key=blockIdx.x*blockDim.x+threadIdx.x;if(key>=nr*8)return;int id=s->spawn[key];
+ if(id<n&&s->nearest[key]>=SPACING&&!s->reserved[key]){Car& c=cars[id];c.state=1;c.pos=0;c.v=0;}
+}
+
+}
+#include "leader_index.cuh"
+#include "leader_radix.cuh"
+#include "junction_request_index.cuh"
+#include "incremental_leaders.cuh"
+
+struct ValidRequestKey {__host__ __device__ bool operator()(unsigned long long key)const{return key!=~0ULL;}};
+__global__ void candidateKeys(const EntryRequest* requests,const Movement* moves,const int* ids,int count,unsigned long long* keys){int k=blockIdx.x*blockDim.x+threadIdx.x;if(k>=count)return;int i=ids[k];EntryRequest q=requests[i];keys[k]=q.pass<0?~0ULL:(static_cast<unsigned long long>(moves[q.mid].junction)<<33)|(static_cast<unsigned long long>(q.pass)<<32)|static_cast<unsigned int>(i);}
+
+void runScalableJunctionSimulation(const char* scenario){
+ bool parallel=!(std::getenv("LPSIM_JUNCTION_PARALLEL")&&std::string(std::getenv("LPSIM_JUNCTION_PARALLEL"))=="0");
+ bool exclusive=std::getenv("LPSIM_JUNCTION_EXCLUSIVE")&&std::string(std::getenv("LPSIM_JUNCTION_EXCLUSIVE"))=="1";
+ std::ifstream f(scenario);std::string model;int n,mode;float duration,dt;
+ if(!(f>>model>>n>>duration>>dt>>mode)||n<1||dt<=0)throw std::runtime_error("Invalid junction scenario");
+ std::ifstream in(model);int nr,nm,nj;if(!(in>>nr>>nm>>nj)||nr<1||nm<1||nj<1)throw std::runtime_error("Invalid junction model");
+ std::vector<Road> roads(nr);std::vector<Movement> moves(nm);std::vector<int> conflicts;
+ for(auto& r:roads)if(!(in>>r.from>>r.to>>r.lanes>>r.length>>r.speed)||r.length<=0||r.lanes<1||r.lanes>8)throw std::runtime_error("Invalid road");
+ for(auto& m:moves)if(!(in>>m.junction>>m.in>>m.out>>m.inLane>>m.outLane>>m.turn>>m.axis>>m.length>>m.rtor)||m.length<=0)throw std::runtime_error("Invalid movement");
+ std::vector<std::vector<int>> neighbors(nm);std::string format;in>>format;
+ if(format=="SPARSE"){int count;in>>count;if(count<0)throw std::runtime_error("Invalid sparse count");for(int k=0;k<count;++k){int a,b;in>>a>>b;if(a<0||a>=nm||b<0||b>=nm)throw std::runtime_error("Invalid sparse conflict");neighbors[a].push_back(b);}}
+ else{int first=std::stoi(format);for(int i=0;i<nm;++i)for(int j=0;j<nm;++j){int v=first;if(i||j)in>>v;if(v)neighbors[i].push_back(j);}}
+ if(!in)throw std::runtime_error("Invalid conflict matrix");
+ conflicts.resize(nm+1);for(int i=0;i<nm;++i){auto& row=neighbors[i];std::sort(row.begin(),row.end());row.erase(std::unique(row.begin(),row.end()),row.end());conflicts[i+1]=conflicts[i]+row.size();}
+ for(const auto& row:neighbors)conflicts.insert(conflicts.end(),row.begin(),row.end());
+ if(!parallel&&(nr>64||nm>512))throw std::runtime_error("Serial reference supports only small validation networks");
+ // Partition ownership is required to avoid cross-junction reservation races.
+ for(const auto& m:moves)if(m.in<0||m.in>=nr||m.out<0||m.out>=nr||m.junction<0||m.junction>=nj||roads[m.in].to!=m.junction||roads[m.out].from!=m.junction)throw std::runtime_error("Invalid junction ownership");
+ for(int i=0;i<nm;++i)for(int j:neighbors[i])if(moves[i].junction!=moves[j].junction)throw std::runtime_error("Cross-junction conflict requires shared arbitration");
+ std::vector<Car> cars(n);
+ for(auto& c:cars){f>>c.departure>>c.n;if(c.n<2||c.n>MAX_ROUTE)throw std::runtime_error("Invalid route length");for(int k=0;k<c.n;++k)f>>c.edges[k];for(int k=0;k<c.n;++k)f>>c.lanes[k];for(int k=0;k<c.n-1;++k)f>>c.moves[k];float initial;f>>initial;if(initial>=0){c.state=1;c.pos=initial;}
+  for(int k=0;k<c.n;++k)if(c.edges[k]<0||c.edges[k]>=nr||c.lanes[k]<0||c.lanes[k]>=roads[c.edges[k]].lanes)throw std::runtime_error("Invalid route lane");
+  for(int k=0;k<c.n-1;++k){int id=c.moves[k];if(id<0||id>=nm||moves[id].in!=c.edges[k]||moves[id].out!=c.edges[k+1]||moves[id].inLane!=c.lanes[k]||moves[id].outLane!=c.lanes[k+1])throw std::runtime_error("Invalid route movement");}}
+ if(!f)throw std::runtime_error("Incomplete scenario");
+ float startTime=0;
+ if(const char* restart=std::getenv("LPSIM_RESTART")){std::ifstream snap(restart,std::ios::binary);int count;snap.read((char*)&count,sizeof(count));snap.read((char*)&startTime,sizeof(startTime));if(count!=n)throw std::runtime_error("Snapshot count mismatch");snap.read((char*)cars.data(),n*sizeof(Car));if(!snap)throw std::runtime_error("Incomplete snapshot");}
+ auto* dr=device(roads);auto* dm=device(moves);auto* dc=device(conflicts);auto* a=device(cars);auto* b=device(cars);
+ JunctionSummary summary{};summary.capacity=std::max(nr*8,nm);
+ summary.nearest=device(std::vector<float>(summary.capacity));summary.arrival=device(std::vector<float>(summary.capacity));summary.tail=device(std::vector<float>(summary.capacity));
+ summary.busy=device(std::vector<int>(summary.capacity));summary.reserved=device(std::vector<int>(summary.capacity));summary.owner=device(std::vector<int>(summary.capacity));summary.spawn=device(std::vector<int>(summary.capacity));summary.granted=device(std::vector<int>(nm));
+ std::vector<int> offsets(nj+1);for(auto m:moves)offsets[m.junction+1]++;for(int j=0;j<nj;++j)offsets[j+1]+=offsets[j];summary.junctionOffsets=device(offsets);
+ auto* ds=device(std::vector<JunctionSummary>{summary});EntryRequest* dq;check(cudaMalloc(&dq,n*sizeof(EntryRequest)));
+ MotionContext motionContext(nr,nm,n);
+ JunctionRequestIndex requestIndex(n,nj);
+ bool indexed=std::getenv("LPSIM_LEADER_INDEX")&&std::string(std::getenv("LPSIM_LEADER_INDEX"))=="1";
+ const char* sortOption=std::getenv("LPSIM_LEADER_SORT");
+ std::string sortMode=sortOption?sortOption:"radix";
+ if(indexed&&sortMode!="radix"&&sortMode!="comparator")throw std::runtime_error("LPSIM_LEADER_SORT must be radix or comparator");
+ bool radix=sortMode=="radix";
+ if(indexed&&radix&&nr>=(1<<29))throw std::runtime_error("Road IDs exceed radix leader key capacity");
+ LeaderIndex laneIndex(n,indexed,radix);int* leaders=laneIndex.leaders;
+ bool compactMotion=std::getenv("LPSIM_COMPACT_MOTION")&&std::string(std::getenv("LPSIM_COMPACT_MOTION"))=="1";
+ CompactState hot{nullptr,n};if(compactMotion)check(cudaMalloc(&hot.values,14*n*sizeof(float)));
+ int trajectoryStride=std::getenv("LPSIM_TRAJECTORY_STRIDE")?std::max(1,atoi(std::getenv("LPSIM_TRAJECTORY_STRIDE"))):2;
+ std::ofstream traj("states.csv"),events("events.csv"),signals("signals.csv"),series("timeseries.csv");
+ traj<<"time,id,state,edge,lane,movement,pos,speed\n";events<<"time,id,event,movement,turn,axis,light,wait_seconds\n";signals<<"time,movement,state\n";series<<"time,active,stopped,in_junction,completed,pending\n";
+ traj<<std::setprecision(9);events<<std::setprecision(9);
+ unsigned long long gapFailures=0,conflictFailures=0,invalid=0,insideStops=0,redTurns=0,entries=0,deniedSpace=0,deniedYield=0;double calc=0,advanceMs=0,junctionMs=0;int maxSame=0;
+ cudaEvent_t ev0,ev1,ev2;check(cudaEventCreate(&ev0));check(cudaEventCreate(&ev1));check(cudaEventCreate(&ev2));
+ std::ofstream stepMetrics("step_metrics.csv");
+ stepMetrics<<"time,requested,pending,not_departed,road_stopped,road_moving,connector,completed,entries,spawned,completed_step,blocked_space,blocked_conflict_or_yield,advance_gpu_ms,junction_gpu_ms\n";
+ const std::string indexPolicy=std::getenv("LPSIM_INDEX_POLICY")?std::getenv("LPSIM_INDEX_POLICY"):"bulk";
+ bool indexTiming=std::getenv("LPSIM_TIMING_ONLY");IncrementalLeaders incremental(n,nr,!indexTiming);LeaderIndex referenceIndex(n,true,true);
+ std::ofstream indexMetrics("index_metrics.csv");indexMetrics<<"time,index_ms,reference_bulk_ms,membership_changes,dirty_lanes\n";
+ cudaEvent_t indexEvents[3];for(auto& e:indexEvents)check(cudaEventCreate(&e));
+ std::vector<int> observedLeaders(n),expectedLeaders(n);
+ int steps=int(std::round(duration/dt));
+ const std::string experiment=std::getenv("LPSIM_EXPERIMENT")?std::getenv("LPSIM_EXPERIMENT"):"baseline";
+ bool trace=experiment=="trace",oracle=experiment=="oracle",current=experiment=="current",timing=std::getenv("LPSIM_TIMING_ONLY");
+ int rate=experiment=="multi2"?2:experiment=="multi4"?4:1;
+ if(!compactMotion||!parallel||!requestIndex.enabled||!indexed||motionContext.flags!=3)throw std::runtime_error("Experiment requires compact indexed parallel baseline");
+ std::ofstream traceFile;if(trace)traceFile.open("request_trace.bin",std::ios::binary);
+ std::vector<EntryRequest> hostRequests(n);
+ std::vector<std::vector<int>> masks;
+ if(oracle){std::ifstream masksFile(std::getenv("LPSIM_ORACLE_MASK"),std::ios::binary);int windows;masksFile.read((char*)&windows,4);masks.resize(windows);for(auto& v:masks){int count;masksFile.read((char*)&count,4);v.resize(count);masksFile.read((char*)v.data(),count*4);}if(!masksFile)throw std::runtime_error("Invalid masks");}
+ int* candidateIds=device(std::vector<int>(n));int candidateCount=0;
+ unsigned long long* packed=device(std::vector<unsigned long long>(n));
+ float* held=device(std::vector<float>(n));int* previousEdge=device(std::vector<int>(n,-1));
+ unsigned long long* counters=timing?nullptr:device(std::vector<unsigned long long>(2));
+ double assignmentMs=0;unsigned long long submitted=0;
+
+ for(int step=0;step<steps;++step){float t=startTime+step*dt;
+  if(std::getenv("LPSIM_SAVE_SNAPSHOTS")&&step%120==0){std::ofstream snap("snapshot_"+std::to_string(int(t))+".bin",std::ios::binary);snap.write((char*)&n,sizeof(n));snap.write((char*)&t,sizeof(t));snap.write((char*)cars.data(),n*sizeof(Car));}
+  int prePending=0,preFuture=0,preStopped=0,preMoving=0,preConnector=0,preCompleted=0;
+  for(const auto& c:cars){prePending+=c.state==0;preFuture+=c.state==0&&c.departure>t;preStopped+=c.state==1&&c.v<.5f;preMoving+=c.state==1&&c.v>=.5f;preConnector+=c.state==2;preCompleted+=c.state==3;}
+  const auto beforeEntries=entries,beforeSpace=deniedSpace,beforeYield=deniedYield;
+  auto start=std::chrono::steady_clock::now();
+  if(oracle&&step%8==0){auto begin=std::chrono::steady_clock::now();const auto& ids=masks.at(step/8);candidateCount=ids.size();if(candidateCount)check(cudaMemcpy(candidateIds,ids.data(),candidateCount*4,cudaMemcpyHostToDevice));assignmentMs+=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-begin).count();}
+  check(cudaEventRecord(ev0));check(cudaEventRecord(indexEvents[0]));
+ if(indexPolicy=="bulk"){laneIndex.build(a);leaders=laneIndex.leaders;}else{incremental.build(a,indexPolicy=="periodic8"&&step%8==0);leaders=incremental.bulk.leaders;}
+ check(cudaEventRecord(indexEvents[1]));
+ if(!indexTiming){referenceIndex.build(a);check(cudaEventRecord(indexEvents[2]));check(cudaEventSynchronize(indexEvents[2]));float own,ref;check(cudaEventElapsedTime(&own,indexEvents[0],indexEvents[1]));check(cudaEventElapsedTime(&ref,indexEvents[1],indexEvents[2]));
+ check(cudaMemcpy(observedLeaders.data(),leaders,n*4,cudaMemcpyDeviceToHost));check(cudaMemcpy(expectedLeaders.data(),referenceIndex.leaders,n*4,cudaMemcpyDeviceToHost));if(observedLeaders!=expectedLeaders)throw std::runtime_error("Incremental leader mismatch at step "+std::to_string(step));
+ unsigned int counts[2]={0,0};if(indexPolicy!="bulk")check(cudaMemcpy(counts,incremental.stats,8,cudaMemcpyDeviceToHost));indexMetrics<<t<<','<<own<<','<<ref<<','<<counts[0]<<','<<counts[1]<<'\n';}
+
+ motionContext.build(a,dm,dc,t,mode,exclusive);
+ if(compactMotion){extractCompact<<<(n+127)/128,128>>>(a,hot);if(rate==1){advanceCompact<<<(n+127)/128,128>>>(hot,b,n,dr,dm,dc,nm,t,dt,mode,exclusive,leaders,nullptr,-1,motionContext.head,motionContext.links,motionContext.available);}else advanceMulti<<<(n+127)/128,128>>>(hot,b,n,dr,dm,dc,nm,t,dt,mode,exclusive,leaders,nullptr,-1,motionContext.head,motionContext.links,motionContext.available,held,previousEdge,step,rate,counters);}else advance<<<(n+127)/128,128>>>(a,b,n,dr,dm,dc,nm,t,dt,mode,exclusive,leaders,nullptr,-1,motionContext.head,motionContext.links,motionContext.available);check(cudaGetLastError());check(cudaEventRecord(ev1));if(parallel){
+   prepareJunctions<<<(std::max(n,summary.capacity)+127)/128,128>>>(b,n,dm,dt,ds);check(cudaGetLastError());
+   summarizeJunctions<<<(n+127)/128,128>>>(b,n,dr,dm,t,mode,ds);check(cudaGetLastError());
+   if(!oracle||candidateCount)requestJunctionEntry<<<((oracle?candidateCount:n)+127)/128,128>>>(b,n,dr,dm,dc,nm,t,mode,exclusive,ds,dq,oracle?candidateIds:nullptr,candidateCount);check(cudaGetLastError());
+   if(requestIndex.enabled){
+    if(oracle||current){
+     check(cudaMemset(requestIndex.begin,0,nj*4));check(cudaMemset(requestIndex.end,0,nj*4));
+     int count=candidateCount;
+     if(current){makeJunctionRequestKeys<<<(n+127)/128,128>>>(dq,dm,packed,n);auto first=thrust::device_pointer_cast(packed);count=thrust::copy_if(first,first+n,thrust::device_pointer_cast(requestIndex.keys),ValidRequestKey())-thrust::device_pointer_cast(requestIndex.keys);}
+     else if(count)candidateKeys<<<(count+127)/128,128>>>(dq,dm,candidateIds,count,requestIndex.keys);
+     if(count){thrust::sort(thrust::device_pointer_cast(requestIndex.keys),thrust::device_pointer_cast(requestIndex.keys)+count);findJunctionRequestRanges<<<(count+127)/128,128>>>(requestIndex.keys,count,requestIndex.begin,requestIndex.end);}
+     submitted+=count;
+    }else {requestIndex.build(dq,dm);submitted+=n;}
+
+    arbitrateIndexedJunctions<<<(nj+127)/128,128>>>(b,n,dr,dm,dc,nm,nj,exclusive,ds,dq,requestIndex.keys,requestIndex.begin,requestIndex.end);
+   }else arbitrateJunctions<<<(nj+127)/128,128>>>(b,n,dr,dm,dc,nm,nj,exclusive,ds,dq);check(cudaGetLastError());
+   spawnJunctionVehicles<<<(nr*8+127)/128,128>>>(b,n,nr,ds);check(cudaGetLastError());
+  }else{junctionStep<<<1,1>>>(b,n,dr,dm,dc,nm,t,dt,mode,exclusive);check(cudaGetLastError());}check(cudaEventRecord(ev2));check(cudaEventSynchronize(ev2));calc+=std::chrono::duration<double>(std::chrono::steady_clock::now()-start).count();float am,jm;check(cudaEventElapsedTime(&am,ev0,ev1));check(cudaEventElapsedTime(&jm,ev1,ev2));advanceMs+=am;junctionMs+=jm;std::swap(a,b);
+  if(trace){check(cudaMemcpy(hostRequests.data(),dq,n*sizeof(EntryRequest),cudaMemcpyDeviceToHost));std::vector<int> ids;for(int i=0;i<n;++i)if(hostRequests[i].pass>=0)ids.push_back(i);int count=ids.size();traceFile.write((char*)&count,4);traceFile.write((char*)ids.data(),count*4);}
+  if(timing)continue;
+  check(cudaMemcpy(cars.data(),a,n*sizeof(Car),cudaMemcpyDeviceToHost));
+  int active=0,stopped=0,inside=0,completed=0,pending=0;
+  for(int i=0;i<n;++i){const auto& c=cars[i];active+=c.state==1||c.state==2;stopped+=(c.state==1||c.state==2)&&c.v<.5;inside+=c.state==2;completed+=c.state==3;pending+=c.state==0;
+   invalid+=!std::isfinite(c.pos)||!std::isfinite(c.v)||c.v<0||c.pos<0||(c.state==1&&c.pos>roads[c.edges[c.k]].length+.001f)||(c.state==2&&c.pos>moves[c.mid].length+.001f);insideStops+=c.state==2&&c.v<.5f;
+   deniedSpace+=c.denial==2;deniedYield+=c.denial==1||c.denial==3;
+   if(c.event==1||c.event==2){auto m=moves[c.mid];entries++;redTurns+=c.event==2;events<<t+dt<<','<<i<<','<<c.event<<','<<c.mid<<','<<m.turn<<','<<m.axis<<','<<indication(m,t,mode)<<','<<c.entryWait<<'\n';}
+   if((step+1)%trajectoryStride==0&&(c.state==1||c.state==2))traj<<t+dt<<','<<i<<','<<c.state<<','<<c.edges[c.k]<<','<<c.lanes[c.k]<<','<<c.mid<<','<<c.pos<<','<<c.v<<'\n';
+  }
+  stepMetrics<<t<<','<<n<<','<<prePending<<','<<preFuture<<','<<preStopped<<','<<preMoving<<','<<preConnector<<','<<preCompleted<<','<<entries-beforeEntries<<','<<prePending-pending<<','<<completed-preCompleted<<','<<deniedSpace-beforeSpace<<','<<deniedYield-beforeYield<<','<<am<<','<<jm<<'\n';
+  std::vector<std::pair<int,float>> lanePositions;std::vector<int> occupiedMovements;
+  for(const auto& c:cars){if(c.state==1)lanePositions.emplace_back(c.edges[c.k]*16+c.lanes[c.k],c.pos);if(c.state==2){occupiedMovements.push_back(c.mid);lanePositions.emplace_back(nr*16+c.mid,c.pos);}}
+  std::sort(lanePositions.begin(),lanePositions.end());
+  for(size_t i=1;i<lanePositions.size();++i)if(lanePositions[i].first==lanePositions[i-1].first&&lanePositions[i].second-lanePositions[i-1].second<SPACING-.001f)gapFailures++;
+  for(size_t i=0;i<occupiedMovements.size();++i)for(size_t j=i+1;j<occupiedMovements.size();++j)conflictFailures+=conflictsWith(conflicts.data(),nm,occupiedMovements[i],occupiedMovements[j])&&(exclusive||occupiedMovements[i]!=occupiedMovements[j]);
+  std::vector<int> movementCounts(nm);for(int m:occupiedMovements)maxSame=std::max(maxSame,++movementCounts[m]);
+  // Check spacing across road/connector boundaries, not just within each container.
+  std::vector<float> nearest(nr*8,1.e30f),furthest(nr*8,-1.e30f);for(const auto& c:cars)if(c.state==1){int key=c.edges[c.k]*8+c.lanes[c.k];nearest[key]=std::min(nearest[key],c.pos);furthest[key]=std::max(furthest[key],c.pos);}
+  for(const auto& c:cars)if(c.state==2){const auto& m=moves[c.mid];gapFailures+=m.length-c.pos+nearest[m.out*8+m.outLane]<SPACING-.001f;gapFailures+=roads[m.in].length-furthest[m.in*8+m.inLane]+c.pos<SPACING-.001f;}
+  if((step+1)%2==0){series<<t+dt<<','<<active<<','<<stopped<<','<<inside<<','<<completed<<','<<pending<<'\n';if(nm<=512)for(int m=0;m<nm;++m)signals<<t<<','<<m<<','<<indication(moves[m],t,mode)<<'\n';}
+ }
+ check(cudaMemcpy(cars.data(),a,n*sizeof(Car),cudaMemcpyDeviceToHost));
+ std::ofstream finalState("final.bin",std::ios::binary);finalState.write((char*)cars.data(),n*sizeof(Car));
+ unsigned long long hostCounters[2]={0,0};if(counters)check(cudaMemcpy(hostCounters,counters,16,cudaMemcpyDeviceToHost));
+ std::ofstream experimentMetrics("experiment.json");experimentMetrics<<"{\"rate\":"<<rate<<",\"reused_acceleration_updates\":"<<hostCounters[0]<<",\"road_updates\":"<<hostCounters[1]<<",\"submitted_keys\":"<<submitted<<",\"assignment_ms\":"<<assignmentMs<<"}\n";
+ int completed=0,active=0,pending=0;for(auto c:cars){completed+=c.state==3;active+=c.state==1||c.state==2;pending+=c.state==0;}
+ std::ofstream metrics("metrics.json");metrics<<"{\"trips\":"<<n<<",\"completed\":"<<completed<<",\"active\":"<<active<<",\"pending\":"<<pending<<",\"steps\":"<<steps<<",\"calculation_seconds\":"<<calc<<",\"gap_failures\":"<<gapFailures<<",\"conflict_failures\":"<<conflictFailures<<",\"invalid_states\":"<<invalid<<",\"stopped_in_junction_samples\":"<<insideStops<<",\"entries\":"<<entries<<",\"right_on_red_entries\":"<<redTurns<<",\"downstream_blocked_decisions\":"<<deniedSpace<<",\"yield_blocked_decisions\":"<<deniedYield<<",\"parallel_junctions\":"<<parallel<<",\"exclusive\":"<<exclusive<<",\"advance_gpu_ms\":"<<advanceMs<<",\"junction_gpu_ms\":"<<junctionMs<<",\"max_same_movement_occupancy\":"<<maxSame<<"}\n";
+ check(cudaEventDestroy(ev0));check(cudaEventDestroy(ev1));check(cudaEventDestroy(ev2));
+ for(auto p:{summary.nearest,summary.arrival,summary.tail})check(cudaFree(p));for(auto p:{summary.busy,summary.reserved,summary.owner,summary.spawn,summary.granted,summary.junctionOffsets})check(cudaFree(p));check(cudaFree(ds));check(cudaFree(dq));
+ if(hot.values)check(cudaFree(hot.values));check(cudaFree(a));check(cudaFree(b));check(cudaFree(dr));check(cudaFree(dm));check(cudaFree(dc));
+ std::cout<<"Junction run completed: "<<completed<<" / "<<n<<"; invariant failures "<<gapFailures+conflictFailures+invalid+insideStops<<std::endl;
+ if(gapFailures||conflictFailures||invalid||insideStops)throw std::runtime_error("Junction invariant violation");
+}
+
+#ifndef LPSIM_SCALABLE_LIBRARY
+int main(int argc,char** argv){try{if(argc!=2)throw std::runtime_error("Expected scenario path");runScalableJunctionSimulation(argv[1]);return 0;}catch(const std::exception& e){std::cerr<<e.what()<<std::endl;return 1;}}
+#endif
