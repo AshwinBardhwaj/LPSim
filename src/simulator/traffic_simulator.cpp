@@ -2,6 +2,7 @@
 
 #pragma once
 #include "traffic_simulator.h"
+#include "vehicle_profiles.h"
 #include <assert.h>
 #include <cstdlib>
 #include <chrono>
@@ -79,6 +80,7 @@ void B18TrafficSimulator::createB2018People(float startTime, float endTime, int 
   b18TrafficOD.resetTrafficVehicleJob(trafficVehicleVec);
   b18TrafficOD.loadB18TrafficPeople(startTime, endTime, trafficVehicleVec,
       simRoadGraph->myRoadGraph_BI, limitNumPeople, addRandomPeople);
+  applyVehicleProfiles(trafficVehicleVec);
 }
 
 void B18TrafficSimulator::createB2018PeopleSP(
@@ -87,6 +89,7 @@ void B18TrafficSimulator::createB2018PeopleSP(
   b18TrafficOD.resetTrafficVehicleJob(trafficVehicleVec);
   b18TrafficOD.loadB18TrafficPeopleSP(startTime, endTime, trafficVehicleVec,
       graph_, limitNumPeople, addRandomPeople, dep_times);
+  applyVehicleProfiles(trafficVehicleVec);
 }
 
 void B18TrafficSimulator::resetPeopleJobANDintersections() {
@@ -426,7 +429,7 @@ void B18TrafficSimulator::simulateInGPU(const int ngpus, const int numOfPasses, 
       if (numOfPasses > 1) filename += ".pass" + std::to_string(nP);
       trajectoryFile.open(filename);
       if (!trajectoryFile) throw std::runtime_error("Cannot open trajectory output: " + filename);
-      trajectoryFile << "vehicle_id,timestamp,edge_id,route_index,lane_idx,pos_m,speed,edge_id_kind,lane_change_attempted,lane_change_gap_rejected\n";
+      trajectoryFile << "vehicle_id,timestamp,edge_id,route_index,lane_idx,pos_m,speed,edge_id_kind,lane_change_attempted,lane_change_gap_rejected,vehicle_type\n";
       trajectoryFile << std::setprecision(std::numeric_limits<float>::max_digits10);
       for (const auto& outgoing : graph_->edge_ids_)
         for (const auto& edge : outgoing)
@@ -527,7 +530,7 @@ void B18TrafficSimulator::simulateInGPU(const int ngpus, const int numOfPasses, 
               trajectoryFile << sample.vehicleId << ',' << currentTime + deltaTime << ','
                   << physical->second << ',' << sample.pathCurr - sample.pathInit << ','
                   << sample.lane << ',' << sample.position << ',' << sample.speed
-                  << ",uniqueid," << sample.laneChangeAttempted << ',' << sample.laneChangeGapRejected << '\n';
+                  << ",uniqueid," << sample.laneChangeAttempted << ',' << sample.laneChangeGapRejected << ',' << sample.vehicleType << '\n';
             }
             if (!trajectoryFile) throw std::runtime_error("Failed writing trajectory output");
           }
@@ -975,6 +978,7 @@ void simulateOnePersonCPU(
   std::vector<uchar> &trafficLights,
   const parameters & simParameters) {
   //if(DEBUG_TRAFFIC==1)printf("currentTime %f   0 Person: %d State %d Time Dep %f\n",currentTime,p,trafficVehicleVec[p].active, trafficVehicleVec[p].time_departure);
+  const float minimumGap = (trafficVehicleVec[p].minimumGapM >= 0 ? trafficVehicleVec[p].minimumGapM : simParameters.s_0);
   ///////////////////////////////
   //2.0. check if finished
   if (trafficVehicleVec[p].active == 2) {
@@ -1025,7 +1029,7 @@ void simulateOnePersonCPU(
       uchar laneChar;
       bool placed = false;
 
-      ushort numCellsEmptyToBePlaced = simParameters.s_0;
+      ushort numCellsEmptyToBePlaced = minimumGap;
       ushort countEmptyCells = 0;
 
       for (ushort b = initShift; (b < numOfCells) && (placed == false); b++) {
@@ -1280,7 +1284,7 @@ void simulateOnePersonCPU(
 
   if (found == true) { //car in front and slower than us
     // 2.1.2 calculate dv_dt
-    s_star = simParameters.s_0 + std::max(0.0f,
+    s_star = minimumGap + std::max(0.0f,
                             (trafficVehicleVec[p].v * trafficVehicleVec[p].T + (trafficVehicleVec[p].v *
                                 delta_v) / (2 * std::sqrt(trafficVehicleVec[p].a * trafficVehicleVec[p].b))));
     thirdTerm = std::pow(((s_star) / (s)), 2);
@@ -1288,7 +1292,7 @@ void simulateOnePersonCPU(
   }
 
   float dv_dt = trafficVehicleVec[p].a * (1.0f - std::pow((
-      trafficVehicleVec[p].v / trafficVehicleVec[p].maxSpeedMperSec), 4) - thirdTerm);
+      trafficVehicleVec[p].v / std::min(trafficVehicleVec[p].maxSpeedMperSec, trafficVehicleVec[p].desiredSpeedMps)), 4) - thirdTerm);
 
   // 2.1.3 update values
   numMToMove = std::max(0.0f,
@@ -1466,7 +1470,7 @@ void simulateOnePersonCPU(
               bool acceptLC = true;
 
               if (gap_a != 1000.0f) {
-                g_na_D = std::max(simParameters.s_0, simParameters.s_0 + b1A * trafficVehicleVec[p].v + b2A *
+                g_na_D = std::max(minimumGap, minimumGap + b1A * trafficVehicleVec[p].v + b2A *
                                   (trafficVehicleVec[p].v - v_a * 3.0f));
 
                 if (gap_a < g_na_D) { //gap smaller than critical gap
@@ -1475,7 +1479,7 @@ void simulateOnePersonCPU(
               }
 
               if (acceptLC == true && gap_b != 1000.0f) {
-                g_bn_D = std::max(simParameters.s_0, simParameters.s_0 + b1B * v_b * 3.0f + b2B * (v_b * 3.0f -
+                g_bn_D = std::max(minimumGap, minimumGap + b1B * v_b * 3.0f + b2B * (v_b * 3.0f -
                                   trafficVehicleVec[p].v));
 
                 if (gap_b < g_bn_D) { //gap smaller than critical gap
@@ -1611,7 +1615,7 @@ void simulateOnePersonCPU(
               bool acceptLC = true;
 
               if (gap_a != 1000.0f) {
-                g_na_M = std::max(simParameters.s_0, simParameters.s_0 + (b1A * trafficVehicleVec[p].v + b2A *
+                g_na_M = std::max(minimumGap, minimumGap + (b1A * trafficVehicleVec[p].v + b2A *
                                               (trafficVehicleVec[p].v - v_a * 3.0f)));
 
                 if (gap_a < g_na_M) { //gap smaller than critical gap
@@ -1620,7 +1624,7 @@ void simulateOnePersonCPU(
               }
 
               if (acceptLC == true && gap_b != 1000.0f) {
-                g_bn_M = std::max(simParameters.s_0, simParameters.s_0 + (b1B * v_b * 3.0f + b2B * (v_b * 3.0f -
+                g_bn_M = std::max(minimumGap, minimumGap + (b1B * v_b * 3.0f + b2B * (v_b * 3.0f -
                                               trafficVehicleVec[p].v)));
 
                 if (gap_b < g_bn_M) { //gap smaller than critical gap

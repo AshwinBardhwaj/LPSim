@@ -1,0 +1,13 @@
+{
+  "source": "data/networks/sf_partial",
+  "source_hashes": {
+    "nodes.csv": "f268c1cde92d852d59453159c179158dccdf50c702973f36a7f350936598c1f8",
+    "edges.csv": "24d0daf20ab97c33c97a6e8af2a246cc5decfae4c4e590cbe074558e8c3e9493"
+  },
+  "roads": 39269,
+  "junctions": 17348,
+  "movements": 93612,
+  "routes": 10790,
+  "synthetic": true,
+  "notes": "Same geometry/connector construction as Berkeley research model; Lane counts clamped to supported 1..8 range; stochastic lane-continuous routes, not calibrated OD demand. No cross-network validation claim until exact physical tests pass."
+}

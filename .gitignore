@@ -101,3 +101,8 @@ htmlcov/
 *.nsys-rep
 *.qdrep
 *.log
+
+# Generated SF scaling network; retain generator and provenance
+/data/networks/sf_partial_local_scaling/geometry.json
+/data/networks/sf_partial_local_scaling/model.txt
+/data/networks/sf_partial_local_scaling/route_pool.json

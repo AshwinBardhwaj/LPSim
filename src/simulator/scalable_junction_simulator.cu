@@ -195,6 +195,7 @@ __global__ void spawnJunctionVehicles(Car* cars,int n,int nr,const JunctionSumma
 #include "../../tools/leader_index.cuh"
 #include "../../tools/leader_radix.cuh"
 #include "../../tools/junction_request_index.cuh"
+#include "mobil.cuh"
 void runScalableJunctionSimulation(const char* scenario){
  bool parallel=!(std::getenv("LPSIM_JUNCTION_PARALLEL")&&std::string(std::getenv("LPSIM_JUNCTION_PARALLEL"))=="0");
  bool exclusive=std::getenv("LPSIM_JUNCTION_EXCLUSIVE")&&std::string(std::getenv("LPSIM_JUNCTION_EXCLUSIVE"))=="1";
@@ -227,6 +228,7 @@ void runScalableJunctionSimulation(const char* scenario){
  summary.busy=device(std::vector<int>(summary.capacity));summary.reserved=device(std::vector<int>(summary.capacity));summary.owner=device(std::vector<int>(summary.capacity));summary.spawn=device(std::vector<int>(summary.capacity));summary.granted=device(std::vector<int>(nm));
  std::vector<int> offsets(nj+1);for(auto m:moves)offsets[m.junction+1]++;for(int j=0;j<nj;++j)offsets[j+1]+=offsets[j];summary.junctionOffsets=device(offsets);
  auto* ds=device(std::vector<JunctionSummary>{summary});EntryRequest* dq;check(cudaMalloc(&dq,n*sizeof(EntryRequest)));
+ mobil::Engine mobilEngine(n,nr,moves);
  MotionContext motionContext(nr,nm,n);
  JunctionRequestIndex requestIndex(n,nj);
  bool indexed=std::getenv("LPSIM_LEADER_INDEX")&&std::string(std::getenv("LPSIM_LEADER_INDEX"))=="1";
@@ -262,7 +264,7 @@ void runScalableJunctionSimulation(const char* scenario){
     arbitrateIndexedJunctions<<<(nj+127)/128,128>>>(b,n,dr,dm,dc,nm,nj,exclusive,ds,dq,requestIndex.keys,requestIndex.begin,requestIndex.end);
    }else arbitrateJunctions<<<(nj+127)/128,128>>>(b,n,dr,dm,dc,nm,nj,exclusive,ds,dq);check(cudaGetLastError());
    spawnJunctionVehicles<<<(nr*8+127)/128,128>>>(b,n,nr,ds);check(cudaGetLastError());
-  }else{junctionStep<<<1,1>>>(b,n,dr,dm,dc,nm,t,dt,mode,exclusive);check(cudaGetLastError());}check(cudaEventRecord(ev2));check(cudaEventSynchronize(ev2));calc+=std::chrono::duration<double>(std::chrono::steady_clock::now()-start).count();float am,jm;check(cudaEventElapsedTime(&am,ev0,ev1));check(cudaEventElapsedTime(&jm,ev1,ev2));advanceMs+=am;junctionMs+=jm;std::swap(a,b);check(cudaMemcpy(cars.data(),a,n*sizeof(Car),cudaMemcpyDeviceToHost));
+  }else{junctionStep<<<1,1>>>(b,n,dr,dm,dc,nm,t,dt,mode,exclusive);check(cudaGetLastError());}mobilEngine.step(b,dr,dm,t+dt,mode);check(cudaEventRecord(ev2));check(cudaEventSynchronize(ev2));calc+=std::chrono::duration<double>(std::chrono::steady_clock::now()-start).count();float am,jm;check(cudaEventElapsedTime(&am,ev0,ev1));check(cudaEventElapsedTime(&jm,ev1,ev2));advanceMs+=am;junctionMs+=jm;std::swap(a,b);check(cudaMemcpy(cars.data(),a,n*sizeof(Car),cudaMemcpyDeviceToHost));
   int active=0,stopped=0,inside=0,completed=0,pending=0;
   for(int i=0;i<n;++i){const auto& c=cars[i];active+=c.state==1||c.state==2;stopped+=(c.state==1||c.state==2)&&c.v<.5;inside+=c.state==2;completed+=c.state==3;pending+=c.state==0;
    invalid+=!std::isfinite(c.pos)||!std::isfinite(c.v)||c.v<0||c.pos<0||(c.state==1&&c.pos>roads[c.edges[c.k]].length+.001f)||(c.state==2&&c.pos>moves[c.mid].length+.001f);insideStops+=c.state==2&&c.v<.5f;
@@ -284,7 +286,7 @@ void runScalableJunctionSimulation(const char* scenario){
   if((step+1)%2==0){series<<t+dt<<','<<active<<','<<stopped<<','<<inside<<','<<completed<<','<<pending<<'\n';if(nm<=512)for(int m=0;m<nm;++m)signals<<t<<','<<m<<','<<indication(moves[m],t,mode)<<'\n';}
  }
  int completed=0,active=0,pending=0;for(auto c:cars){completed+=c.state==3;active+=c.state==1||c.state==2;pending+=c.state==0;}
- std::ofstream metrics("metrics.json");metrics<<"{\"trips\":"<<n<<",\"completed\":"<<completed<<",\"active\":"<<active<<",\"pending\":"<<pending<<",\"steps\":"<<steps<<",\"calculation_seconds\":"<<calc<<",\"gap_failures\":"<<gapFailures<<",\"conflict_failures\":"<<conflictFailures<<",\"invalid_states\":"<<invalid<<",\"stopped_in_junction_samples\":"<<insideStops<<",\"entries\":"<<entries<<",\"right_on_red_entries\":"<<redTurns<<",\"downstream_blocked_decisions\":"<<deniedSpace<<",\"yield_blocked_decisions\":"<<deniedYield<<",\"parallel_junctions\":"<<parallel<<",\"exclusive\":"<<exclusive<<",\"advance_gpu_ms\":"<<advanceMs<<",\"junction_gpu_ms\":"<<junctionMs<<",\"max_same_movement_occupancy\":"<<maxSame<<"}\n";
+ std::ofstream metrics("metrics.json");metrics<<"{\"trips\":"<<n<<",\"completed\":"<<completed<<",\"active\":"<<active<<",\"pending\":"<<pending<<",\"steps\":"<<steps<<",\"calculation_seconds\":"<<calc<<",\"gap_failures\":"<<gapFailures<<",\"conflict_failures\":"<<conflictFailures<<",\"invalid_states\":"<<invalid<<",\"stopped_in_junction_samples\":"<<insideStops<<",\"entries\":"<<entries<<",\"right_on_red_entries\":"<<redTurns<<",\"downstream_blocked_decisions\":"<<deniedSpace<<",\"yield_blocked_decisions\":"<<deniedYield<<",\"parallel_junctions\":"<<parallel<<",\"exclusive\":"<<exclusive<<",\"advance_gpu_ms\":"<<advanceMs<<",\"junction_gpu_ms\":"<<junctionMs<<",\"max_same_movement_occupancy\":"<<maxSame<<",\"mobil_enabled\":"<<mobilEngine.config.enabled<<",\"mobil_changes\":"<<mobilEngine.count()<<"}\n";
  check(cudaEventDestroy(ev0));check(cudaEventDestroy(ev1));check(cudaEventDestroy(ev2));
  for(auto p:{summary.nearest,summary.arrival,summary.tail})check(cudaFree(p));for(auto p:{summary.busy,summary.reserved,summary.owner,summary.spawn,summary.granted,summary.junctionOffsets})check(cudaFree(p));check(cudaFree(ds));check(cudaFree(dq));
  if(hot.values)check(cudaFree(hot.values));check(cudaFree(a));check(cudaFree(b));check(cudaFree(dr));check(cudaFree(dm));check(cudaFree(dc));

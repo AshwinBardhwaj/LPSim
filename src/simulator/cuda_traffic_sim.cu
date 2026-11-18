@@ -805,7 +805,7 @@ __global__ void trajectorySnapshot(const LC::B18TrafficVehicle* vehicles,
   const auto& v = vehicles[i];
   if (v.active != 1) { out[i] = {}; return; }
   out[i] = {v.id, v.indexPathInit, v.indexPathCurr, v.posInLaneM, v.v,
-            v.active, v.numOfLaneInEdge, v.LC_attempted, v.LC_gapRejected};
+            v.active, v.numOfLaneInEdge, v.LC_attempted, v.LC_gapRejected, v.vehicleType};
 }
 
 void b18GetSignalsCUDA(std::vector<std::vector<unsigned char>>& signals) {
@@ -1209,6 +1209,7 @@ __global__ void kernel_trafficSimulation(
   {
   int p = blockIdx.x * blockDim.x + threadIdx.x;
   if (p >= numPeople) return; //CUDA check (inside margins)
+  const float minimumGap = (trafficVehicleVec[p].minimumGapM >= 0 ? trafficVehicleVec[p].minimumGapM : simParameters.s_0);
   trafficVehicleVec[p].LC_attempted = trafficVehicleVec[p].LC_gapRejected = 0;
   assert( numPeople > p);
   if (trafficVehicleVec[p].active == 2) return; // trip finished
@@ -1323,7 +1324,7 @@ __global__ void kernel_trafficSimulation(
     uchar laneChar;
     bool placed = false;
 
-    ushort numCellsEmptyToBePlaced = simParameters.s_0;
+    ushort numCellsEmptyToBePlaced = minimumGap;
     ushort countEmptyCells = 0;
     for (ushort b = initShift; (b < numOfCells) && (!placed); b++) {
       ushort lN = edgesData[firstEdge_d].numLines - 1; //just right lane
@@ -1615,7 +1616,7 @@ __global__ void kernel_trafficSimulation(
     // 2.1.2 calculate dv_dt
     // The following operation is taken from Designing Large-Scale Interactive Traffic Animations for Urban Modeling
     // Section 4.3.1. Car-Following Model formula (2)
-    s_star = simParameters.s_0 + max(0.0f,
+    s_star = minimumGap + max(0.0f,
       (trafficVehicleVec[p].v * trafficVehicleVec[p].T + (trafficVehicleVec[p].v *
       delta_v) / (2 * sqrtf(trafficVehicleVec[p].a * trafficVehicleVec[p].b))));
     thirdTerm = powf(((s_star) / (s)), 2);
@@ -1626,7 +1627,7 @@ __global__ void kernel_trafficSimulation(
   // And also Architecture for Modular Microsimulation of Real Estate Markets and Transportation
   // Section 6.3.2 Per-vehicle and traffic control simulation formula (7)
   float dv_dt = trafficVehicleVec[p].a * (1.0f - std::pow((
-    trafficVehicleVec[p].v / edgesData[currentEdge_d].maxSpeedMperSec), 4) - thirdTerm);
+    trafficVehicleVec[p].v / fminf(edgesData[currentEdge_d].maxSpeedMperSec, trafficVehicleVec[p].desiredSpeedMps)), 4) - thirdTerm);
 
   // 2.1.3 update values
   if(!isUAM) {
@@ -1699,13 +1700,13 @@ __global__ void kernel_trafficSimulation(
       }
       float s_star;
       if (!isUAM && found && (delta_v > 0 || (delta_v==0 &&trafficVehicleVec[p].v==0))) { //car in front and slower than us
-        s_star = simParameters.s_0 + max(0.0f,
+        s_star = minimumGap + max(0.0f,
           (trafficVehicleVec[p].v * trafficVehicleVec[p].T + (trafficVehicleVec[p].v *
           delta_v) / (2 * sqrtf(trafficVehicleVec[p].a * trafficVehicleVec[p].b))));
         thirdTerm = powf(((s_star) / (s)), 2);
       }
       float dv_dt = trafficVehicleVec[p].a * (1.0f - std::pow((
-        trafficVehicleVec[p].v / edgesData[nextEdge_d].maxSpeedMperSec), 4) - thirdTerm);
+        trafficVehicleVec[p].v / fminf(edgesData[nextEdge_d].maxSpeedMperSec, trafficVehicleVec[p].desiredSpeedMps)), 4) - thirdTerm);
       numMToMove = max(0.0f, trafficVehicleVec[p].v * deltaTime + 0.5f * (dv_dt) * deltaTime * deltaTime);
       if(!isUAM) numMToMove /= 2;
       trafficVehicleVec[p].v += dv_dt * deltaTime; 
@@ -1873,12 +1874,12 @@ __global__ void kernel_trafficSimulation(
             } else { // NOT ALONE
               float b1A = 0.05f, b2A = 0.15f;
               float b1B = 0.15f, b2B = 0.40f;
-              // simParameters.s_0-> critical lead gap
+              // minimumGap-> critical lead gap
               float g_na_D, g_bn_D;
               bool acceptLC = true;
 
               if (gap_a != 1000.0f) {
-                g_na_D = max(simParameters.s_0, simParameters.s_0 + b1A * trafficVehicleVec[p].v + b2A *
+                g_na_D = max(minimumGap, minimumGap + b1A * trafficVehicleVec[p].v + b2A *
                   (trafficVehicleVec[p].v - v_a * 3.0f));
 
                 if (gap_a < g_na_D) { //gap smaller than critical gap
@@ -1888,7 +1889,7 @@ __global__ void kernel_trafficSimulation(
               }
 
               if (acceptLC && gap_b != 1000.0f) {
-                g_bn_D = max(simParameters.s_0, simParameters.s_0 + b1B * v_b * 3.0f + b2B * (v_b * 3.0f - trafficVehicleVec[p].v));
+                g_bn_D = max(minimumGap, minimumGap + b1B * v_b * 3.0f + b2B * (v_b * 3.0f - trafficVehicleVec[p].v));
 
                 if (gap_b < g_bn_D) { //gap smaller than critical gap
                   acceptLC = false;
@@ -1998,7 +1999,7 @@ __global__ void kernel_trafficSimulation(
               float b1A = 0.05f, b2A = 0.15f;
               float b1B = 0.15f, b2B = 0.40f;
               float gamma = 0.000025;
-              // simParameters.s_0-> critical lead gap
+              // minimumGap-> critical lead gap
               float distEnd = edgesData[currentEdge_d].length - trafficVehicleVec[p].posInLaneM;
               float expTerm = (1 - exp(-gamma * distEnd * distEnd));
 
@@ -2006,7 +2007,7 @@ __global__ void kernel_trafficSimulation(
               bool acceptLC = true;
 
               if (gap_a != 1000.0f) {
-                g_na_M = max(simParameters.s_0, simParameters.s_0 + (b1A * trafficVehicleVec[p].v + b2A *
+                g_na_M = max(minimumGap, minimumGap + (b1A * trafficVehicleVec[p].v + b2A *
                   (trafficVehicleVec[p].v - v_a * 3.0f)));
 
                 if (gap_a < g_na_M) { //gap smaller than critical gap
@@ -2016,7 +2017,7 @@ __global__ void kernel_trafficSimulation(
               }
 
               if (acceptLC && gap_b != 1000.0f) {
-                g_bn_M = max(simParameters.s_0, simParameters.s_0 + (b1B * v_b * 3.0f + b2B * (v_b * 3.0f -
+                g_bn_M = max(minimumGap, minimumGap + (b1B * v_b * 3.0f + b2B * (v_b * 3.0f -
                   trafficVehicleVec[p].v)));
 
                 if (gap_b < g_bn_M) { //gap smaller than critical gap

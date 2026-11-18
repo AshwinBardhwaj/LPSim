@@ -38,7 +38,10 @@ junctions; actual roundabout yielding is not modeled.
 Normal demand uses designated outer-network groups, not junction interiors.
 Diagnostic fixtures seed cars on entry/exit roads outside connector interiors.
 Lanes are assigned from the planned turn: leftmost for left, rightmost for right.
-There is no discretionary lane-changing model in this mode.
+Discretionary lane changing is disabled by default. The scalable backend now
+supports opt-in GPU MOBIL via `LPSIM_MOBIL=1`; see [MOBIL.md](MOBIL.md) for route
+compatibility, arbitration and multi-GPU restrictions. Historical experiments
+described here used the default without discretionary changes.
 
 The synthetic 72 s controller alternates NS and EW through/right green (20 s)
 and protected left green (8 s), each followed by 3 s yellow and 1 s all red.

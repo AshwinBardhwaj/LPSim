@@ -4,5 +4,5 @@ struct B18TrajectorySample {
   int vehicleId;
   unsigned int pathInit, pathCurr;
   float position, speed;
-  unsigned short active, lane, laneChangeAttempted, laneChangeGapRejected;
+  unsigned short active, lane, laneChangeAttempted, laneChangeGapRejected, vehicleType;
 };

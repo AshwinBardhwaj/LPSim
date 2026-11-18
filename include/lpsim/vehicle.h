@@ -67,6 +67,9 @@ struct B18TrafficVehicle {
   float a;//acceleration
   float b;//break
   float T;// Time heading
+  unsigned short vehicleType = 0; // user-defined profile category
+  float minimumGapM = -1.0f; // negative: use global s_0
+  float desiredSpeedMps = 1.0e30f; // road limit remains authoritative
   float cum_v = 0; //Cumulative velocity of each person across all iterations
 
   // lane changing
@@ -113,6 +116,9 @@ struct B18TrafficVehicle {
                a == other.a &&
                b == other.b &&
                T == other.T &&
+               vehicleType == other.vehicleType &&
+               minimumGapM == other.minimumGapM &&
+               desiredSpeedMps == other.desiredSpeedMps &&
                cum_v == other.cum_v &&
                LC_initOKLanes == other.LC_initOKLanes &&
                LC_endOKLanes == other.LC_endOKLanes &&

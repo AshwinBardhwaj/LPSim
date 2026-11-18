@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>LPSim · Vehicle trajectories</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#101b28;color:#e8eef5;font:15px system-ui}header{padding:22px 28px;border-bottom:1px solid #334458}h1{margin:0;font-size:24px}p{color:#b4c3d4;line-height:1.5}main{display:grid;grid-template-columns:320px 1fr;gap:20px;padding:24px}aside,section{background:#182738;padding:20px;border-radius:10px}label{display:block;margin:16px 0 8px}select,button,input{padding:8px}input[type=range]{width:100%}button{cursor:pointer}canvas{width:100%;display:block}#map{height:480px;background:#122130}#charts{height:240px}pre{white-space:pre-wrap;font:14px/1.7 monospace}a{color:#79d6c0}@media(max-width:800px){main{grid-template-columns:1fr}}
+</style>
+<header><h1>Individual vehicle trajectories</h1><p>Recorded speed and derived acceleration · road geometry · relative simulation seconds</p></header>
+<main><aside><label for="vehicle">Inspect vehicle</label><select id="vehicle"></select>
+<label><input type="checkbox" id="compare" checked> Show other selected vehicles</label>
+<label><input type="checkbox" id="relative"> Align by first observed sample</label>
+<p><button id="play">Play</button> <select id="rate" aria-label="Playback rate"><option value="1">1×</option><option value="5">5×</option><option value="20">20×</option><option value="60">60×</option></select></p>
+<input id="seek" type="range" step="0.1" aria-label="Playback time"><pre id="readout"></pre>
+<a href="observations.csv" download>Download observed coordinates and dynamics</a>
+<p>Acceleration is Δspeed/Δtime, not the IDM parameter <i>a</i>. It is unknown at each continuity break. Coordinates lack elevation; energy modeling also needs mass, drag, drivetrain, and road grade.</p>
+<p id="quality"></p></aside><section><canvas id="map"></canvas><p>Solid traces: recorded route geometry. Marker position is interpolated between frames. Dashed comparison traces show other selected vehicles. Geographic centerlines do not show vehicle width.</p><canvas id="charts"></canvas><p>Top: recorded speed (m/s). Bottom: derived acceleration (m/s²). Gaps remain disconnected.</p></section></main>
+<script>
+const data=/*TRAJECTORY_DATA*/null;
+const $=id=>document.getElementById(id), ids=[...new Set(data.trips.map(t=>t.vendor))];
+for(const id of ids){const option=document.createElement('option');option.value=id;option.textContent=id;$('vehicle').append(option)}
+const first=Object.fromEntries(ids.map(id=>[id,Math.min(...data.trips.filter(t=>t.vendor===id).map(t=>t.path[0][2]))]));
+let playing=false,last;
+const offset=t=>$('relative').checked?first[t.vendor]:0;
+const time=(t,p)=>p[2]-offset(t);
+function limits(){const starts=data.trips.map(t=>time(t,t.path[0])),ends=data.trips.map(t=>time(t,t.path.at(-1)));$('seek').min=Math.min(...starts);$('seek').max=Math.max(...ends);$('seek').value=$('seek').min;draw()}
+function context(id){const c=$(id),r=c.getBoundingClientRect();c.width=r.width*devicePixelRatio;c.height=r.height*devicePixelRatio;const x=c.getContext('2d');x.scale(devicePixelRatio,devicePixelRatio);return[x,r.width,r.height]}
+function draw(){
+const now=+$('seek').value, chosen=$('vehicle').value,visible=data.trips.filter(t=>t.vendor===chosen||$('compare').checked);
+const [ctx,w,h]=context('map');let xmin=Infinity,xmax=-Infinity,ymin=Infinity,ymax=-Infinity;
+for(const t of visible)for(const p of t.path){xmin=Math.min(xmin,p[0]);xmax=Math.max(xmax,p[0]);ymin=Math.min(ymin,p[1]);ymax=Math.max(ymax,p[1])}
+const cos=Math.cos((ymin+ymax)/2*Math.PI/180),scale=Math.min((w-60)/Math.max((xmax-xmin)*cos,1e-6),(h-60)/Math.max(ymax-ymin,1e-6));
+const xy=p=>[w/2+(p[0]-(xmin+xmax)/2)*cos*scale,h/2-(p[1]-(ymin+ymax)/2)*scale];
+function line(points,color,width=1,dash=[]){ctx.strokeStyle=color;ctx.lineWidth=width;ctx.setLineDash(dash);ctx.beginPath();points.forEach((p,i)=>{const[x,y]=xy(p);i?ctx.lineTo(x,y):ctx.moveTo(x,y)});ctx.stroke();ctx.setLineDash([])}
+for(const road of data.roads)line(road,'#34495c');
+let observation=null;
+for(const t of visible){const selected=t.vendor===chosen,color=selected?'#67e1bd':'#e5ac70';line(t.path,color,selected?3:1.5,selected?[]:[5,5]);
+if(now<time(t,t.path[0])||now>time(t,t.path.at(-1)))continue;
+let lo=0,hi=t.path.length-1;while(lo+1<hi){const mid=(lo+hi)>>1;if(time(t,t.path[mid])<=now)lo=mid;else hi=mid}
+const a=t.path[lo],b=t.path[hi],f=(now-time(t,a))/(b[2]-a[2]),p=[a[0]+f*(b[0]-a[0]),a[1]+f*(b[1]-a[1])],[x,y]=xy(p);
+ctx.fillStyle=color;ctx.beginPath();ctx.arc(x,y,6,0,2*Math.PI);ctx.fill();
+if(selected){let i=now===time(t,b)?hi:lo;while(i>=0&&!t.samples[i])i--;if(i>=0)observation={...t.samples[i],point:t.path[i]}}
+}
+const fmt=v=>v==null?'unavailable':v.toFixed(3);
+$('readout').textContent=`Playback: ${now.toFixed(1)} s\nVehicle: ${chosen}\n`+(observation?`Observation: ${observation.point[2]} s\nSpeed: ${fmt(observation.speed_mps)} m/s\nAcceleration: ${fmt(observation.acceleration_mps2)} m/s²\nLon: ${observation.point[0].toFixed(7)}\nLat: ${observation.point[1].toFixed(7)}\nEdge: ${observation.edge} · lane: ${observation.lane}`:'No observation at this time');
+const [g,cw,ch]=context('charts'),min=+$('seek').min,max=+$('seek').max;
+for(const [row,key,title] of [[0,'speed_mps','Speed · m/s'],[1,'acceleration_mps2','Acceleration · m/s²']]){
+let low=0,high=0;for(const t of visible)for(const s of t.samples)if(s&&s[key]!=null){low=Math.min(low,s[key]);high=Math.max(high,s[key])}if(high===low)high=low+1;
+const top=row*ch/2+22,bottom=(row+1)*ch/2-20,X=t=>50+(t-min)/Math.max(max-min,1)*(cw-65),Y=v=>bottom-(v-low)/(high-low)*(bottom-top);
+g.fillStyle='#b4c3d4';g.fillText(`${title} [${low.toFixed(1)}, ${high.toFixed(1)}]`,10,top-7);g.strokeStyle='#40576b';g.beginPath();g.moveTo(50,Y(0));g.lineTo(cw-15,Y(0));g.stroke();
+for(const t of visible){g.strokeStyle=t.vendor===chosen?'#67e1bd':'#e5ac70';g.beginPath();let connected=false;for(let i=0;i<t.path.length;i++){const s=t.samples[i];if(!s)continue;if(s[key]==null){connected=false;continue}const x=X(time(t,t.path[i])),y=Y(s[key]);connected?g.lineTo(x,y):g.moveTo(x,y);connected=true}g.stroke()}
+g.strokeStyle='#fff';g.beginPath();g.moveTo(X(now),top);g.lineTo(X(now),bottom);g.stroke();g.fillText(`${min.toFixed(0)} s`,50,bottom+15);g.fillText(`${max.toFixed(0)} s`,cw-65,bottom+15);
+}}
+$('quality').textContent='Validation: '+JSON.stringify(data.diagnostics);
+$('seek').oninput=draw;$('vehicle').onchange=draw;$('compare').onchange=draw;$('relative').onchange=limits;window.onresize=draw;
+$('play').onclick=()=>{playing=!playing;$('play').textContent=playing?'Pause':'Play';last=undefined};
+function frame(t){if(playing&&last!==undefined){const next=+$('seek').value+Math.min((t-last)/1000,.25)*+$('rate').value;$('seek').value=next>+$('seek').max?$('seek').min:next;draw()}last=t;requestAnimationFrame(frame)}
+limits();requestAnimationFrame(frame);
+</script></html>

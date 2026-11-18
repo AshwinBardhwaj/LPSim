@@ -119,7 +119,7 @@ def convert(network, routes_file, trajectories, max_speed=45, lane_width=0, sink
     database = tempfile.NamedTemporaryFile(suffix='.sqlite') if sink else None
     connection = sqlite3.connect(database.name) if database else None
     if connection:
-        connection.execute('CREATE TABLE samples (vid TEXT, t REAL, idx INTEGER, eid INTEGER, pos REAL, lane INTEGER)')
+        connection.execute('CREATE TABLE samples (vid TEXT, t REAL, idx INTEGER, eid INTEGER, pos REAL, lane INTEGER, speed REAL)')
         connection.execute('PRAGMA cache_size=-16384')
         connection.execute('PRAGMA temp_store=FILE')
 
@@ -138,9 +138,12 @@ def convert(network, routes_file, trajectories, max_speed=45, lane_width=0, sink
             t, pos = float(r['timestamp']), float(r['pos_m'])
             if not math.isfinite(t) or not math.isfinite(pos):
                 raise ValueError('Non-finite trajectory timestamp or position')
-            record = (t, int(r['route_index']), int(r['edge_id']), pos, int(r.get('lane_idx', 0)))
+            speed = float(r['speed']) if r.get('speed') else None
+            if speed is not None and (not math.isfinite(speed) or speed < 0):
+                raise ValueError('Invalid recorded speed')
+            record = (t, int(r['route_index']), int(r['edge_id']), pos, int(r.get('lane_idx', 0)), speed)
             if connection:
-                connection.execute('INSERT INTO samples VALUES (?,?,?,?,?,?)', (r['vehicle_id'], *record))
+                connection.execute('INSERT INTO samples VALUES (?,?,?,?,?,?,?)', (r['vehicle_id'], *record))
             else:
                 rows[r['vehicle_id']].append(record)
             stats['input_samples'] += 1
@@ -161,9 +164,10 @@ def convert(network, routes_file, trajectories, max_speed=45, lane_width=0, sink
         for eid in route:
             prefix.append(prefix[-1] + edges[eid].length)
         path, details, previous = [], [], None
+        previous_speed = None
 
         def flush():
-            nonlocal path, details, previous
+            nonlocal path, details, previous, previous_speed
             if len(path) >= 2:
                 trip = {'vendor': str(vid), 'path': path, 'samples': details}
                 if sink:
@@ -172,8 +176,9 @@ def convert(network, routes_file, trajectories, max_speed=45, lane_width=0, sink
                     trips.append(trip)
                 stats['output_segments'] += 1
             path, details, previous = [], [], None
+            previous_speed = None
 
-        for t, group in itertools.groupby(sorted(samples), key=lambda s: s[0]):
+        for t, group in itertools.groupby(sorted(samples, key=lambda sample: sample[0]), key=lambda s: s[0]):
             group = list(group)
             unique = set(group)
             stats['duplicate_samples'] += len(group) - len(unique)
@@ -181,7 +186,7 @@ def convert(network, routes_file, trajectories, max_speed=45, lane_width=0, sink
                 stats['conflicting_timestamps'] += 1
                 flush()
                 continue
-            _, idx, eid, pos, lane = unique.pop()
+            _, idx, eid, pos, lane, speed = unique.pop()
             if idx < 0 or idx >= len(route):
                 stats['route_overflow'] += 1
                 flush()
@@ -229,7 +234,11 @@ def convert(network, routes_file, trajectories, max_speed=45, lane_width=0, sink
 
             point = edge.lane_point(pos, lane, lane_width) if lane_width else edge.point(pos)
             path.append([*point, t])
-            details.append({'edge': eid, 'route_index': idx, 'lane': lane, 'pos_m': pos})
+            acceleration = ((speed - previous_speed) / (t - previous[0])
+                            if previous is not None and speed is not None and previous_speed is not None else None)
+            details.append({'edge': eid, 'route_index': idx, 'lane': lane, 'pos_m': pos,
+                            'speed_mps': speed, 'acceleration_mps2': acceleration})
+            previous_speed = speed
             previous = (t, idx, cumulative, lane)
             stats['accepted_samples'] += 1
         flush()
